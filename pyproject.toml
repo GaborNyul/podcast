@@ -62,11 +62,18 @@ dev = [
     "types-jsonschema>=4.26.0.20260518",
 ]
 
-[tool.uv]
+# A dependency cooldown (uv `exclude-newer`) is deliberately NOT set: uv hard-fails
+# any package whose index omits upload timestamps, and AMD's TheRock nightly index
+# (required for gfx1151 torch) serves none. Supply-chain risk is mitigated instead
+# by exact-pinning every TheRock package and hash-pinning uv.lock (`uv lock --check`
+# in CI).
+[tool.uv]  # nosemgrep: package_managers.uv.uv-missing-dependency-cooldown.uv-missing-dependency-cooldown
 environments = ["sys_platform == 'linux'"]
+
 # TheRock ships the ROCm runtime only as pre-releases (7.13.0aYYYYMMDD); stable
 # releases are still preferred for every package that has them.
 prerelease = "allow"
+
 
 [[tool.uv.index]]
 name = "therock-gfx1151"

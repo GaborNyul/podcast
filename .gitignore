@@ -17,6 +17,10 @@ htmlcov/
 mutants/
 .mutmut-cache
 
+# Secrets
+.env
+.env.*
+
 # Project artifacts
 episodes/
 *.wav

@@ -55,7 +55,7 @@ class Qwen3Engine:
             self._pipeline = cast(
                 "SpeechPipeline",
                 pipeline(
-                    "text-to-speech",
+                    "text-to-audio",
                     model=MODEL_ID,
                     device=device,
                     trust_remote_code=True,

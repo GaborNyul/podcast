@@ -79,7 +79,7 @@ class TestQwen3Engine:
         engine = qwen3.Qwen3Engine(AppConfig())
         out = tmp_path / "line.wav"
         engine.synthesize_line("hello", "Ethan", out)
-        assert created[0]["task"] == "text-to-speech"
+        assert created[0]["task"] == "text-to-audio"
         assert created[0]["model"] == qwen3.MODEL_ID
         assert created[0]["device"] == "cuda"
         assert pipeline_instance.calls[0][1]["forward_params"] == {"speaker": "Ethan"}
