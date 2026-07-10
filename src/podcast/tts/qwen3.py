@@ -6,17 +6,23 @@ HSA_OVERRIDE_GFX_VERSION. Inference goes through the official `qwen-tts` package
 thin adapter; `pytest -m integration -k qwen3` runs the real-model RTF benchmark.
 """
 
+from collections.abc import Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import Protocol, cast
 
 from podcast.config import AppConfig
 from podcast.errors import TTSError
 from podcast.tts.base import EngineInfo
 
-if TYPE_CHECKING:
-    from qwen_tts import (  # pyright: ignore[reportMissingImports, reportMissingTypeStubs]
-        Qwen3TTSModel,
-    )
+
+class SpeechModel(Protocol):
+    """The slice of qwen_tts.Qwen3TTSModel this engine uses (typed locally so the
+    engine type-checks whether or not the qwen3 extra is installed)."""
+
+    def generate_custom_voice(
+        self, *, text: str, language: str, speaker: str
+    ) -> tuple[Sequence[object], int]: ...
+
 
 MODEL_ID = "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice"
 SAMPLE_RATE = 24000
@@ -34,15 +40,15 @@ class Qwen3Engine:
 
     def __init__(self, config: AppConfig) -> None:
         self._device_override = config.tts.device
-        self._model: Qwen3TTSModel | None = None
+        self._model: SpeechModel | None = None
         self._device = self._device_override or "cuda"
 
-    def _load(self) -> "Qwen3TTSModel":
+    def _load(self) -> SpeechModel:
         if self._model is None:
             try:
                 import torch  # pyright: ignore[reportMissingImports]
                 from qwen_tts import (  # pyright: ignore[reportMissingImports, reportMissingTypeStubs]
-                    Qwen3TTSModel,
+                    Qwen3TTSModel,  # pyright: ignore[reportUnknownVariableType]
                 )
             except ImportError as exc:
                 raise TTSError(INSTALL_HINT) from exc
@@ -53,9 +59,16 @@ class Qwen3Engine:
                 )
                 device = "cuda" if cuda_ok else "cpu"
             self._device = device
-            dtype = torch.bfloat16 if device.startswith("cuda") else torch.float32
-            self._model = Qwen3TTSModel.from_pretrained(  # pyright: ignore[reportUnknownMemberType]
-                MODEL_ID, device_map=device, dtype=dtype
+            dtype = (  # pyright: ignore[reportUnknownVariableType]
+                torch.bfloat16  # pyright: ignore[reportUnknownMemberType]
+                if device.startswith("cuda")
+                else torch.float32  # pyright: ignore[reportUnknownMemberType]
+            )
+            self._model = cast(
+                "SpeechModel",
+                Qwen3TTSModel.from_pretrained(  # pyright: ignore[reportUnknownMemberType]
+                    MODEL_ID, device_map=device, dtype=dtype
+                ),
             )
         return self._model
 
@@ -65,7 +78,7 @@ class Qwen3Engine:
     def synthesize_line(self, text: str, voice: str, out_path: Path) -> None:
         model = self._load()
         try:
-            wavs, sample_rate = model.generate_custom_voice(  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
+            wavs, sample_rate = model.generate_custom_voice(
                 text=text, language=LANGUAGE, speaker=voice
             )
         except Exception as exc:
