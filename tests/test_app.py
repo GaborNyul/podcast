@@ -258,6 +258,31 @@ class TestCreateCommand:
         assert engine.renders > 0
 
 
+class TestEnginesCommand:
+    @pytest.mark.usefixtures("isolated_env")
+    def test_lists_both_engines_with_status(self) -> None:
+        result = runner.invoke(app_mod.app, ["engines"])
+        assert result.exit_code == 0
+        assert "kokoro" in result.output
+        assert "qwen3" in result.output
+        assert "selected" in result.output
+
+
+class TestVoicesCommand:
+    @pytest.mark.usefixtures("isolated_env")
+    def test_lists_voices_and_mapping(self) -> None:
+        result = runner.invoke(app_mod.app, ["voices", "--engine", "kokoro"])
+        assert result.exit_code == 0
+        assert "af_heart" in result.output
+        assert "Alex -> am_michael" in result.output
+
+    @pytest.mark.usefixtures("isolated_env")
+    def test_defaults_to_configured_engine(self) -> None:
+        result = runner.invoke(app_mod.app, ["voices"])
+        assert result.exit_code == 0
+        assert "qwen3 voices" in result.output
+
+
 class TestMain:
     def test_renders_podcast_error_with_exit_code(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]

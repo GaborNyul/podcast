@@ -5,6 +5,7 @@ from typing import Annotated
 
 import typer
 from rich.progress import Progress
+from rich.table import Table
 
 from podcast import __version__, doctor
 from podcast.audio.assemble import assemble_episode
@@ -18,8 +19,8 @@ from podcast.script import budget as budget_mod
 from podcast.script import pipeline
 from podcast.script.models import Transcript
 from podcast.tts.cache import CacheStats, ensure_segment
-from podcast.tts.registry import create_engine
-from podcast.tts.voices import resolve_voices
+from podcast.tts.registry import available_engines, create_engine
+from podcast.tts.voices import resolve_voices, voices_for
 from podcast.workspace import (
     Workspace,
     create_workspace,
@@ -238,6 +239,47 @@ def create_command(
         workspace, _transcript, _budget = _run_generate(config, sources, minutes, name, progress)
         stats = _run_synthesize(config, workspace, progress)
     _report_synthesis(workspace, stats)
+
+
+@app.command("engines")
+def engines_command() -> None:
+    """List TTS engines and whether this machine can run them."""
+    config = load_config()
+    table = Table(title="TTS engines", header_style="cyan")
+    table.add_column("engine")
+    table.add_column("status")
+    table.add_column("detail", overflow="fold")
+    for engine_name in available_engines():
+        probe = config.model_copy(deep=True)
+        probe.tts.engine = engine_name
+        result = doctor.check_engine(probe)
+        marker = "[bold green]ok[/]" if result.ok else "[bold red]unavailable[/]"
+        detail = result.detail if result.ok else f"{result.detail} — {result.hint}"
+        current = " (selected)" if engine_name == config.tts.engine else ""
+        table.add_row(f"{engine_name}{current}", marker, detail)
+    ui.out.print(table)
+
+
+@app.command("voices")
+def voices_command(
+    engine: Annotated[
+        str | None, typer.Option("--engine", help="Engine to list voices for.")
+    ] = None,
+) -> None:
+    """List an engine's voices and the current speaker mapping."""
+    config = load_config()
+    _apply_overrides(config, None, engine)
+    engine_name = config.tts.engine
+    table = Table(title=f"{engine_name} voices", header_style="cyan")
+    table.add_column("voice")
+    table.add_column("gender")
+    for voice in voices_for(engine_name):
+        table.add_row(voice.id, voice.gender)
+    ui.out.print(table)
+    hosts = [host.name for host in config.script.hosts]
+    mapping = resolve_voices(config, engine_name, hosts)
+    for speaker, voice_id in mapping.items():
+        ui.out.print(f"{speaker} -> {voice_id}")
 
 
 def main() -> None:
