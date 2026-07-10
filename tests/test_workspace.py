@@ -46,6 +46,23 @@ class TestCreateAndOpen:
         ws.create_workspace(tmp_path, "demo")
         assert ws.open_workspace(tmp_path, "demo").root == tmp_path / "demo"
 
+    @pytest.mark.parametrize("slug", ["../../x", "/abs/path", "a/b", "a\\b", "", ".", ".."])
+    def test_create_rejects_slugs_that_escape_episodes_dir(self, tmp_path: Path, slug: str) -> None:
+        with pytest.raises(ScriptError, match="simple name"):
+            ws.create_workspace(tmp_path / "episodes", slug)
+        assert not (tmp_path / "episodes").exists()  # rejected before anything is created
+        assert not (tmp_path.parent / "x").exists()
+
+    @pytest.mark.parametrize("slug", ["../../x", "/abs/path", "a/b", "a\\b", "", ".", ".."])
+    def test_open_rejects_slugs_that_escape_episodes_dir(self, tmp_path: Path, slug: str) -> None:
+        with pytest.raises(ScriptError, match="simple name"):
+            ws.open_workspace(tmp_path / "episodes", slug)
+
+    def test_normal_slug_still_works(self, tmp_path: Path) -> None:
+        created = ws.create_workspace(tmp_path / "episodes", "normal-slug")
+        assert created.root == tmp_path / "episodes" / "normal-slug"
+        assert ws.open_workspace(tmp_path / "episodes", "normal-slug").root == created.root
+
     def test_paths_are_derived_from_root(self, tmp_path: Path) -> None:
         workspace = ws.create_workspace(tmp_path, "demo")
         assert workspace.sources_path.name == "sources.json"

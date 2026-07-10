@@ -62,13 +62,23 @@ def slugify(title: str) -> str:
     return slug or "episode"
 
 
+def _validate_slug(slug: str) -> None:
+    """Reject slugs that are not a single path component, so roots stay under episodes_dir."""
+    if not slug or slug in {".", ".."} or "/" in slug or "\\" in slug:
+        raise ScriptError(
+            f"invalid episode name {slug!r}: pass a simple name without path separators"
+        )
+
+
 def create_workspace(episodes_dir: Path, slug: str) -> Workspace:
+    _validate_slug(slug)
     root = episodes_dir / slug
     root.mkdir(parents=True, exist_ok=True)
     return Workspace(root)
 
 
 def open_workspace(episodes_dir: Path, slug: str) -> Workspace:
+    _validate_slug(slug)
     root = episodes_dir / slug
     if not root.is_dir():
         raise ScriptError(f"no episode workspace at {root}; run `podcast generate` first")

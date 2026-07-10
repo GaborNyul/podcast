@@ -93,6 +93,15 @@ class TestAssembleEpisode:
         assert "seg1.wav" in lines[2]
 
     @pytest.mark.usefixtures("fake_ffmpeg")
+    def test_apostrophe_in_path_is_escaped_in_concat_list(self, tmp_path: Path) -> None:
+        quirky_dir = tmp_path / "O'Brien"
+        quirky_dir.mkdir()
+        _assemble(tmp_path, _segments(quirky_dir, 2))
+        concat = (tmp_path / "work" / "concat.txt").read_text(encoding="utf-8")
+        assert "O'\\''Brien" in concat  # ffmpeg concat quoting: ' -> '\''
+        assert "O'Brien" not in concat  # the raw, unescaped form must be gone
+
+    @pytest.mark.usefixtures("fake_ffmpeg")
     def test_single_segment_has_no_silence(self, tmp_path: Path) -> None:
         _assemble(tmp_path, _segments(tmp_path, 1))
         concat = (tmp_path / "work" / "concat.txt").read_text(encoding="utf-8")

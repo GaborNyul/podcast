@@ -119,6 +119,21 @@ class TestGenerateCommand:
         assert result.exit_code == 0, result.output
         assert (isolated_env / "episodes" / "my-slug" / "script.md").is_file()
 
+    def test_traversal_name_is_rejected(
+        self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("podcast.ingest.tokens.load_encoder", lambda: None)
+        source = isolated_env / "notes.txt"
+        source.write_text("Ants are strong.", encoding="utf-8")
+        result = runner.invoke(
+            app_mod.app,
+            ["generate", str(source), "-d", "1", "--provider", "fake", "--name", "../../escaped"],
+        )
+        assert result.exit_code != 0
+        assert isinstance(result.exception, ScriptError)
+        assert not (isolated_env / "episodes").exists()
+        assert not (isolated_env.parent / "escaped").exists()
+
     def test_missing_source_fails_with_ingest_error(self, isolated_env: Path) -> None:
         result = runner.invoke(
             app_mod.app,

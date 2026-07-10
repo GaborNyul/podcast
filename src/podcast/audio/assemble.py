@@ -53,6 +53,12 @@ def _pause_ms(rng: random.Random, minimum_ms: int, maximum_ms: int) -> int:
     return max(_SILENCE_STEP_MS, round(raw / _SILENCE_STEP_MS) * _SILENCE_STEP_MS)
 
 
+def _concat_entry(path: Path) -> str:
+    """One concat-demuxer line; inside single quotes ffmpeg needs ' written as '\\''."""
+    escaped = str(path.resolve()).replace("'", "'\\''")
+    return f"file '{escaped}'\n"
+
+
 def assemble_episode(
     segment_paths: Sequence[Path],
     out_path: Path,
@@ -79,9 +85,7 @@ def assemble_episode(
         entries.append(segment)
 
     concat_list = work_dir / "concat.txt"
-    concat_list.write_text(
-        "".join(f"file '{path.resolve()}'\n" for path in entries), encoding="utf-8"
-    )
+    concat_list.write_text("".join(_concat_entry(path) for path in entries), encoding="utf-8")
     combined = work_dir / "combined.wav"
     _run(
         [
