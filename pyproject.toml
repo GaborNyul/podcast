@@ -1,0 +1,133 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "podcast"
+version = "0.1.0"
+description = "Local-first NotebookLM-style podcast generator: documents in, two-host audio episode out."
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+license = { text = "MIT" }
+authors = [{ name = "Gabor Nyul", email = "gabor.nyul.hun@gmail.com" }]
+dependencies = [
+    "typer>=0.16",
+    "rich>=13.9",
+    "pydantic>=2.10",
+    "pydantic-settings>=2.8",
+    "httpx>=0.28",
+    "anthropic>=0.45",
+    "tiktoken>=0.8",
+    "markitdown[pdf,docx]>=0.1.1",
+    "trafilatura>=2.0",
+    "kokoro-onnx>=0.4.9",
+]
+
+[project.scripts]
+podcast = "podcast.cli.app:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-cov>=6.0",
+    "pytest-timeout>=2.3",
+    "hypothesis>=6.120",
+    "respx>=0.22",
+    "jsonschema>=4.23",
+    "mypy>=1.14",
+    "pyright>=1.1.390",
+    "ruff>=0.9",
+    "pre-commit>=4.0",
+    "mutmut>=3.2",
+    "pip-audit>=2.7",
+    "pip-licenses>=5.0",
+    "detect-secrets>=1.5",
+    "bandit[toml]>=1.8",
+]
+
+[tool.uv]
+environments = ["sys_platform == 'linux'"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+src = ["src", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "SIM",  # flake8-simplify
+    "C4",   # flake8-comprehensions
+    "DTZ",  # flake8-datetimez
+    "PIE",  # flake8-pie
+    "PT",   # flake8-pytest-style
+    "RET",  # flake8-return
+    "ARG",  # flake8-unused-arguments
+    "S",    # flake8-bandit (security)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S603", "S607"]  # allow assert, subprocess in tests
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+files = ["src", "tests", "scripts"]
+mypy_path = ["scripts"]
+plugins = ["pydantic.mypy"]
+
+[tool.pyright]
+pythonVersion = "3.13"
+typeCheckingMode = "strict"
+include = ["src", "tests", "scripts"]
+extraPaths = ["scripts"]
+venvPath = "."
+venv = ".venv"
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = "--strict-markers -m 'not integration and not performance'"
+markers = [
+    "integration: needs real models/hardware/network; excluded from default runs",
+    "performance: timing-asserted tests; nightly only",
+    "contracts: JSON schema contract validation for workspace artifacts",
+]
+
+[tool.coverage.run]
+source = ["podcast", "scripts"]
+branch = true
+
+[tool.coverage.paths]
+source = ["src/podcast", "*/site-packages/podcast"]
+
+[tool.coverage.report]
+fail_under = 100
+show_missing = true
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "^\\s*\\.\\.\\.$",
+    "if __name__ == \"__main__\":",
+]
+
+[tool.bandit]
+targets = ["src", "scripts"]
+exclude_dirs = ["tests", ".venv"]
+
+[tool.mutmut]
+paths_to_mutate = "src/podcast/"
+tests_dir = "tests/"
+
+[tool.adversarial-review]
+max_iterations = 5          # hard-cap backstop
+fix_threshold = "high"      # fix Critical + High; Medium/Low are residual
+report_path = "reports/adversarial_review.json"
+
+[tool.pip-licenses]
+# GPL-3.0 dependencies are blocked per standards v3 (security scanning, layer 3).
+fail-on = "GPL-3.0"
