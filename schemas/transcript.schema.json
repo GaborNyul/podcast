@@ -1,0 +1,52 @@
+{
+  "$defs": {
+    "Turn": {
+      "description": "One spoken line.",
+      "properties": {
+        "speaker": {
+          "title": "Speaker",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "speaker",
+        "text"
+      ],
+      "title": "Turn",
+      "type": "object"
+    }
+  },
+  "description": "A whole episode script; the unit that round-trips through script.md.",
+  "properties": {
+    "title": {
+      "title": "Title",
+      "type": "string"
+    },
+    "hosts": {
+      "items": {
+        "type": "string"
+      },
+      "minItems": 2,
+      "title": "Hosts",
+      "type": "array"
+    },
+    "turns": {
+      "items": {
+        "$ref": "#/$defs/Turn"
+      },
+      "title": "Turns",
+      "type": "array"
+    }
+  },
+  "required": [
+    "title",
+    "hosts",
+    "turns"
+  ],
+  "title": "Transcript",
+  "type": "object"
+}

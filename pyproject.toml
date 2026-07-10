@@ -43,6 +43,7 @@ dev = [
     "pip-licenses>=5.0",
     "detect-secrets>=1.5",
     "bandit[toml]>=1.8",
+    "types-jsonschema>=4.26.0.20260518",
 ]
 
 [tool.uv]

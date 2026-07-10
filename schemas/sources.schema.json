@@ -1,0 +1,32 @@
+{
+  "type": "array",
+  "items": {
+    "description": "One ingested source: markdown content plus provenance and size metadata.",
+    "properties": {
+      "path": {
+        "title": "Path",
+        "type": "string"
+      },
+      "title": {
+        "title": "Title",
+        "type": "string"
+      },
+      "markdown": {
+        "title": "Markdown",
+        "type": "string"
+      },
+      "tokens": {
+        "title": "Tokens",
+        "type": "integer"
+      }
+    },
+    "required": [
+      "path",
+      "title",
+      "markdown",
+      "tokens"
+    ],
+    "title": "SourceDocument",
+    "type": "object"
+  }
+}

@@ -108,9 +108,7 @@ class TestComplete:
     def test_speaker_without_enum_or_ref_falls_back(self) -> None:
         schema = {
             "type": "object",
-            "properties": {
-                "turns": {"items": {"properties": {"speaker": {"type": "string"}}}}
-            },
+            "properties": {"turns": {"items": {"properties": {"speaker": {"type": "string"}}}}},
         }
         reply = FakeProvider().complete(
             [user("Write dialogue of approximately 60 words.")],
@@ -157,9 +155,7 @@ class TestComplete:
             "type": "object",
             "properties": {
                 "turns": {
-                    "anyOf": [
-                        {"items": {"properties": {"speaker": {"enum": ["Left", "Right"]}}}}
-                    ]
+                    "anyOf": [{"items": {"properties": {"speaker": {"enum": ["Left", "Right"]}}}}]
                 }
             },
         }

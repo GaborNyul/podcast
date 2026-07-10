@@ -1,7 +1,7 @@
 """Schema-guided completion: native enforcement when supported, prompt+retry fallback."""
 
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 from pydantic import BaseModel, ValidationError
 
@@ -34,9 +34,15 @@ def complete_structured[T: BaseModel](
     *,
     temperature: float,
     max_retries: int = 2,
+    schema: Mapping[str, object] | None = None,
 ) -> T:
-    """Get a validated `output_type` from the provider, retrying with error feedback."""
-    schema = output_type.model_json_schema()
+    """Get a validated `output_type` from the provider, retrying with error feedback.
+
+    `schema` overrides the model-derived JSON schema — used to inject dynamic
+    constraints (e.g. a speaker-name enum) while validating with a static model.
+    """
+    if schema is None:
+        schema = output_type.model_json_schema()
     instruction = ChatMessage(
         role="user",
         content=(

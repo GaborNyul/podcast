@@ -75,6 +75,57 @@ class TestConfigCommand:
         assert isinstance(result.exception, ConfigError)
 
 
+class TestGenerateCommand:
+    def test_fake_provider_end_to_end(
+        self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("podcast.ingest.tokens.load_encoder", lambda: None)
+        source = isolated_env / "notes.md"
+        source.write_text("# Ants\n\nAnts can carry fifty times their weight.", encoding="utf-8")
+        (isolated_env / "podcast.toml").write_text('[llm]\nprovider = "fake"\n', encoding="utf-8")
+        result = runner.invoke(app_mod.app, ["generate", str(source), "-d", "1"])
+        assert result.exit_code == 0, result.output
+        roots = list((isolated_env / "episodes").iterdir())
+        assert len(roots) == 1
+        workspace = roots[0]
+        assert (workspace / "script.md").is_file()
+        assert (workspace / "transcript.json").is_file()
+        assert (workspace / "outline.json").is_file()
+        assert (workspace / "sources.json").is_file()
+        assert "**" in (workspace / "script.md").read_text(encoding="utf-8")
+
+    def test_name_override_sets_slug(
+        self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("podcast.ingest.tokens.load_encoder", lambda: None)
+        source = isolated_env / "notes.txt"
+        source.write_text("Ants are strong.", encoding="utf-8")
+        result = runner.invoke(
+            app_mod.app,
+            [
+                "generate",
+                str(source),
+                "-d",
+                "1",
+                "--provider",
+                "fake",
+                "--engine",
+                "kokoro",
+                "--name",
+                "my-slug",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert (isolated_env / "episodes" / "my-slug" / "script.md").is_file()
+
+    def test_missing_source_fails_with_ingest_error(self, isolated_env: Path) -> None:
+        result = runner.invoke(
+            app_mod.app,
+            ["generate", str(isolated_env / "ghost.md"), "--provider", "fake"],
+        )
+        assert result.exit_code != 0
+
+
 class TestMain:
     def test_renders_podcast_error_with_exit_code(
         self, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
