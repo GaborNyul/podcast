@@ -49,11 +49,12 @@ class LLMSettings(BaseModel):
     """Script-LLM provider selection and sampling parameters."""
 
     provider: str = "ollama"
-    model: str = "qwen3:30b-a3b-instruct-2507"
+    model: str | None = None  # None → the provider's default model (see llm.registry)
     base_url: str | None = None
     api_key: str | None = None
     timeout_seconds: float = 300.0
     max_retries: int = 2
+    context_window: int = 262144
     outline_temperature: float = 0.3
     dialogue_temperature: float = 0.8
 
