@@ -7,18 +7,24 @@ import typer
 from rich.progress import Progress
 
 from podcast import __version__, doctor
+from podcast.audio.assemble import assemble_episode
 from podcast.cli import ui
 from podcast.config import AppConfig, load_config
-from podcast.errors import PodcastError
+from podcast.errors import PodcastError, ScriptError
 from podcast.ingest import load_documents, merged_sources_markdown
 from podcast.ingest.tokens import assert_fits_context
 from podcast.llm.registry import create_provider
 from podcast.script import budget as budget_mod
 from podcast.script import pipeline
 from podcast.script.models import Transcript
+from podcast.tts.cache import CacheStats, ensure_segment
+from podcast.tts.registry import create_engine
+from podcast.tts.voices import resolve_voices
 from podcast.workspace import (
     Workspace,
     create_workspace,
+    load_transcript,
+    open_workspace,
     save_outline,
     save_sources,
     save_transcript,
@@ -137,6 +143,101 @@ def generate_command(
     )
     ui.err.print("edit the script if you like, then run: [accent]podcast synthesize[/]")
     ui.out.print(str(workspace.root))
+
+
+def _latest_slug(episodes_dir: Path) -> str:
+    candidates = (
+        [entry for entry in episodes_dir.glob("*/script.md") if entry.is_file()]
+        if episodes_dir.is_dir()
+        else []
+    )
+    if not candidates:
+        raise ScriptError(f"no episodes under {episodes_dir}; run `podcast generate` first")
+    newest = max(candidates, key=lambda path: path.stat().st_mtime)
+    return newest.parent.name
+
+
+def _run_synthesize(config: AppConfig, workspace: Workspace, progress: Progress) -> CacheStats:
+    transcript = load_transcript(workspace)
+    engine = create_engine(config)
+    voices = resolve_voices(config, engine.name, transcript.hosts)
+    stats = CacheStats()
+    spoken = [turn for turn in transcript.turns if turn.text.strip()]
+    task = progress.add_task("Synthesizing lines", total=len(spoken))
+    segment_paths: list[Path] = []
+    for turn in spoken:
+        voice = voices[turn.speaker]
+
+        def render(path: Path, text: str = turn.text, voice_id: str = voice) -> None:
+            engine.synthesize_line(text, voice_id, path)
+
+        segment_paths.append(
+            ensure_segment(workspace.segments_dir, engine.name, voice, turn.text, render, stats)
+        )
+        progress.advance(task)
+
+    assemble_task = progress.add_task("Assembling episode", total=1)
+    assemble_episode(
+        segment_paths,
+        workspace.episode_path,
+        work_dir=workspace.segments_dir / "work",
+        sample_rate=engine.info().sample_rate,
+        pause_min_ms=config.audio.pause_min_ms,
+        pause_max_ms=config.audio.pause_max_ms,
+        bitrate=config.audio.mp3_bitrate,
+        seed=config.audio.seed,
+    )
+    progress.update(assemble_task, completed=1)
+    return stats
+
+
+def _report_synthesis(workspace: Workspace, stats: CacheStats) -> None:
+    ui.err.print(
+        f"[ok]episode ready:[/] {workspace.episode_path} "
+        f"({stats.total} segments: {stats.hits} cached, {stats.misses} rendered)"
+    )
+    ui.out.print(str(workspace.episode_path))
+
+
+@app.command("synthesize")
+def synthesize_command(
+    name: Annotated[
+        str | None, typer.Argument(help="Episode slug (default: most recent episode).")
+    ] = None,
+    engine: Annotated[str | None, typer.Option("--engine", help="TTS engine override.")] = None,
+) -> None:
+    """Render script.md to episode.mp3 (cached: edited lines re-render alone)."""
+    config = load_config()
+    _apply_overrides(config, None, engine)
+    slug = name if name is not None else _latest_slug(config.paths.episodes_dir)
+    workspace = open_workspace(config.paths.episodes_dir, slug)
+    with ui.make_progress() as progress:
+        stats = _run_synthesize(config, workspace, progress)
+    _report_synthesis(workspace, stats)
+
+
+@app.command("create")
+def create_command(
+    sources: Annotated[list[Path], typer.Argument(help="Source documents (txt/md/html/pdf/docx).")],
+    duration: Annotated[
+        int, typer.Option("--duration", "-d", min=0, help="Target minutes (0 = config default).")
+    ] = 0,
+    provider_name: Annotated[
+        str | None, typer.Option("--provider", help="LLM provider override.")
+    ] = None,
+    engine: Annotated[str | None, typer.Option("--engine", help="TTS engine override.")] = None,
+    name: Annotated[
+        str | None, typer.Option("--name", help="Episode slug (default: from the title).")
+    ] = None,
+) -> None:
+    """Generate a script and synthesize the episode in one run."""
+    config = load_config()
+    _apply_overrides(config, provider_name, engine)
+    minutes = duration or config.script.default_minutes
+    with ui.make_progress() as progress:
+        workspace, _transcript, _budget = _run_generate(config, sources, minutes, name, progress)
+        stats = _run_synthesize(config, workspace, progress)
+    _report_synthesis(workspace, stats)
 
 
 def main() -> None:

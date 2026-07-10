@@ -10,7 +10,8 @@ from podcast import __version__
 from podcast.cli import app as app_mod
 from podcast.config import AppConfig
 from podcast.doctor import CheckResult
-from podcast.errors import ConfigError
+from podcast.errors import ConfigError, ScriptError
+from podcast.tts.base import EngineInfo
 
 runner = CliRunner()
 
@@ -124,6 +125,137 @@ class TestGenerateCommand:
             ["generate", str(isolated_env / "ghost.md"), "--provider", "fake"],
         )
         assert result.exit_code != 0
+
+
+class _FakeEngine:
+    name = "kokoro"
+
+    def __init__(self) -> None:
+        self.renders = 0
+
+    def info(self) -> EngineInfo:
+        return EngineInfo(name="kokoro", device="cpu", sample_rate=24000)
+
+    def synthesize_line(self, text: str, voice: str, out_path: Path) -> None:
+        del text, voice
+        self.renders += 1
+        out_path.write_bytes(b"RIFF-fake")
+
+
+def _engine_factory(engine: "_FakeEngine") -> Callable[[AppConfig], "_FakeEngine"]:
+    def factory(_config: AppConfig) -> _FakeEngine:
+        return engine
+
+    return factory
+
+
+def _fake_assemble(monkeypatch: pytest.MonkeyPatch) -> list[list[Path]]:
+    calls: list[list[Path]] = []
+
+    def assemble(segment_paths: list[Path], out_path: Path, **_kwargs: object) -> None:
+        calls.append(list(segment_paths))
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_bytes(b"ID3-fake-mp3")
+
+    monkeypatch.setattr(app_mod, "assemble_episode", assemble)
+    return calls
+
+
+def _generate_episode(isolated_env: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    monkeypatch.setattr("podcast.ingest.tokens.load_encoder", lambda: None)
+    source = isolated_env / "notes.md"
+    source.write_text("# Ants\n\nAnts are impressively strong.", encoding="utf-8")
+    result = runner.invoke(
+        app_mod.app,
+        ["generate", str(source), "-d", "1", "--provider", "fake", "--name", "demo"],
+    )
+    assert result.exit_code == 0, result.output
+    return isolated_env / "episodes" / "demo"
+
+
+class TestSynthesizeCommand:
+    def test_renders_all_lines_and_assembles(
+        self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _generate_episode(isolated_env, monkeypatch)
+        engine = _FakeEngine()
+        monkeypatch.setattr(app_mod, "create_engine", _engine_factory(engine))
+        calls = _fake_assemble(monkeypatch)
+        result = runner.invoke(app_mod.app, ["synthesize", "demo"])
+        assert result.exit_code == 0, result.output
+        assert engine.renders > 0
+        assert len(calls) == 1
+        assert (isolated_env / "episodes" / "demo" / "episode.mp3").is_file()
+
+    def test_second_run_hits_cache(
+        self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _generate_episode(isolated_env, monkeypatch)
+        engine = _FakeEngine()
+        monkeypatch.setattr(app_mod, "create_engine", _engine_factory(engine))
+        _fake_assemble(monkeypatch)
+        runner.invoke(app_mod.app, ["synthesize", "demo"])
+        first_renders = engine.renders
+        result = runner.invoke(app_mod.app, ["synthesize", "demo"])
+        assert result.exit_code == 0
+        assert engine.renders == first_renders  # everything cached
+
+    def test_edited_line_rerenders_only_one_segment(
+        self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        workspace = _generate_episode(isolated_env, monkeypatch)
+        engine = _FakeEngine()
+        monkeypatch.setattr(app_mod, "create_engine", _engine_factory(engine))
+        _fake_assemble(monkeypatch)
+        runner.invoke(app_mod.app, ["synthesize", "demo"])
+        baseline = engine.renders
+        script = workspace / "script.md"
+        lines = script.read_text(encoding="utf-8").splitlines()
+        for index, line in enumerate(lines):
+            if line.startswith("**Alex:**"):
+                lines[index] = "**Alex:** A brand new hand-edited opening line."
+                break
+        script.write_text("\n".join(lines), encoding="utf-8")
+        result = runner.invoke(app_mod.app, ["synthesize", "demo"])
+        assert result.exit_code == 0
+        assert engine.renders == baseline + 1
+
+    def test_defaults_to_most_recent_episode(
+        self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _generate_episode(isolated_env, monkeypatch)
+        engine = _FakeEngine()
+        monkeypatch.setattr(app_mod, "create_engine", _engine_factory(engine))
+        _fake_assemble(monkeypatch)
+        result = runner.invoke(app_mod.app, ["synthesize"])
+        assert result.exit_code == 0, result.output
+
+    def test_no_episodes_fails_clearly(self, isolated_env: Path) -> None:
+        del isolated_env
+        result = runner.invoke(app_mod.app, ["synthesize"])
+        assert result.exit_code != 0
+        assert isinstance(result.exception, ScriptError)
+
+
+class TestCreateCommand:
+    def test_generates_and_synthesizes_in_one_run(
+        self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("podcast.ingest.tokens.load_encoder", lambda: None)
+        engine = _FakeEngine()
+        monkeypatch.setattr(app_mod, "create_engine", _engine_factory(engine))
+        _fake_assemble(monkeypatch)
+        source = isolated_env / "notes.txt"
+        source.write_text("Ants lift many times their body weight.", encoding="utf-8")
+        result = runner.invoke(
+            app_mod.app,
+            ["create", str(source), "-d", "1", "--provider", "fake", "--name", "one-shot"],
+        )
+        assert result.exit_code == 0, result.output
+        workspace = isolated_env / "episodes" / "one-shot"
+        assert (workspace / "script.md").is_file()
+        assert (workspace / "episode.mp3").is_file()
+        assert engine.renders > 0
 
 
 class TestMain:
