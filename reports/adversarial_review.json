@@ -1,0 +1,135 @@
+{
+  "stop_reason": "converged",
+  "rounds_run": 2,
+  "passed": true,
+  "findings": [
+    {
+      "identifier": "path-traversal-via-name-escapes-episodes-dir",
+      "description": "create_workspace/open_workspace joined the user-supplied --name onto episodes_dir unsanitized; '../../x' or absolute names wrote the whole workspace outside episodes/. Fixed: _validate_slug rejects separators, '.', '..', empty and absolute components in both entry points; CLI-level test proves generate --name '../../escaped' fails cleanly.",
+      "severity": "high",
+      "status": "fixed",
+      "first_round": 1,
+      "reason_unfixed": ""
+    },
+    {
+      "identifier": "ffmpeg-concat-single-quote-breaks-assembly",
+      "description": "The ffmpeg concat list wrapped paths in single quotes without escaping literal apostrophes, so any path like /home/O'Brien/ broke synthesis. Fixed: _concat_entry escapes ' as '\\'' ; verified against real ffmpeg 6.1.",
+      "severity": "high",
+      "status": "fixed",
+      "first_round": 1,
+      "reason_unfixed": ""
+    },
+    {
+      "identifier": "ensure-length-count-only-can-discard-all-content",
+      "description": "ensure_length picks the repaired transcript purely by |word_count - budget|; a degenerate near-empty repair of a heavily over-budget script can win and wipe content, surfacing later as 'no audio segments to assemble'.",
+      "severity": "medium",
+      "status": "residual",
+      "first_round": 1,
+      "reason_unfixed": "below fix threshold (medium/low); logged, not fixed"
+    },
+    {
+      "identifier": "openai-strict-json-schema-likely-rejected",
+      "description": "openai_compat always sends response_format json_schema with strict=true, but pydantic-derived schemas lack additionalProperties:false and full 'required' lists, which OpenAI strict mode mandates \u2014 the openai provider likely 400s on structured calls (unconfirmed offline).",
+      "severity": "medium",
+      "status": "residual",
+      "first_round": 1,
+      "reason_unfixed": "below fix threshold (medium/low); logged, not fixed"
+    },
+    {
+      "identifier": "anthropic-default-model-id-invalid",
+      "description": "Reviewer flagged DEFAULT_MODELS['anthropic'] = 'claude-opus-4-8' as a fabricated model id.",
+      "severity": "medium",
+      "status": "residual",
+      "first_round": 1,
+      "reason_unfixed": "false positive: verified against the current Anthropic model catalog \u2014 'claude-opus-4-8' is a valid model alias; the reviewer's model-naming knowledge was stale. No change needed."
+    },
+    {
+      "identifier": "transcript-json-diverges-from-script-md",
+      "description": "transcript.json is written from the raw model while script.md whitespace-normalizes turn text, so the two artifacts can differ for texts with internal newlines; only script.md is ever read back.",
+      "severity": "low",
+      "status": "residual",
+      "first_round": 1,
+      "reason_unfixed": "below fix threshold (medium/low); logged, not fixed"
+    },
+    {
+      "identifier": "markdown-speaker-not-normalized-breaks-roundtrip",
+      "description": "Host names containing newlines or the ':** ' delimiter (config-driven edge case) break or corrupt the script.md round-trip; the property test samples safe names only.",
+      "severity": "low",
+      "status": "residual",
+      "first_round": 1,
+      "reason_unfixed": "below fix threshold (medium/low); logged, not fixed"
+    },
+    {
+      "identifier": "segment-key-null-byte-domain-separation",
+      "description": "segment_key separates fields with 0x00 but allows 0x00 inside fields, so domain separation is theoretically incomplete; unreachable with realistic inputs.",
+      "severity": "low",
+      "status": "residual",
+      "first_round": 1,
+      "reason_unfixed": "below fix threshold (medium/low); logged, not fixed"
+    },
+    {
+      "identifier": "missing-numeric-config-validation",
+      "description": "No bounds on words_per_minute / pause_min_ms>pause_max_ms / calibration; zero values surface as confusing downstream errors (incl. latent ZeroDivisionError in estimated_minutes) instead of clean ConfigError.",
+      "severity": "low",
+      "status": "residual",
+      "first_round": 1,
+      "reason_unfixed": "below fix threshold (medium/low); logged, not fixed"
+    },
+    {
+      "identifier": "copilot-stored-token-no-recovery-and-chmod-race",
+      "description": "A revoked stored GitHub token wedges the copilot provider until github-token.json is deleted manually; the token file is also chmod'ed 0600 only after being written under the default umask.",
+      "severity": "low",
+      "status": "residual",
+      "first_round": 1,
+      "reason_unfixed": "below fix threshold (medium/low); logged, not fixed"
+    },
+    {
+      "identifier": "extract-json-prose-brackets-produce-invalid-json",
+      "description": "extract_json picks the first '[' or '{', so prose containing '[a link]' before the JSON yields an invalid extraction; the validate/retry loop recovers at the cost of one wasted round-trip.",
+      "severity": "low",
+      "status": "residual",
+      "first_round": 1,
+      "reason_unfixed": "below fix threshold (medium/low); logged, not fixed"
+    },
+    {
+      "identifier": "silence-file-cache-ignores-sample-rate",
+      "description": "Cached gap files are keyed by duration only; reusing a work dir across engines with different sample rates could concatenate mismatched silence (both current engines are 24 kHz).",
+      "severity": "low",
+      "status": "residual",
+      "first_round": 1,
+      "reason_unfixed": "below fix threshold (medium/low); logged, not fixed"
+    },
+    {
+      "identifier": "default-engine-qwen3-gpu-only",
+      "description": "TTSSettings.engine defaults to the GPU-only 'qwen3'; machines without the extra fail with a TTSError pointing at the extra instead of silently degrading.",
+      "severity": "low",
+      "status": "residual",
+      "first_round": 1,
+      "reason_unfixed": "below fix threshold; also a deliberate plan decision \u2014 the approved design names Qwen3-TTS (GPU) as the default engine with Kokoro as explicit fallback, and doctor/errors point users to `--engine kokoro`."
+    },
+    {
+      "identifier": "orphaned-segments-never-pruned",
+      "description": "Edited-away lines leave stale <hash>.wav files in segments/ forever; assembly stays correct but the cache grows unboundedly.",
+      "severity": "low",
+      "status": "residual",
+      "first_round": 1,
+      "reason_unfixed": "below fix threshold (medium/low); logged, not fixed"
+    },
+    {
+      "identifier": "concat-entry-and-slug-allow-newline-breaks-assembly",
+      "description": "--name with an embedded newline/CR passes _validate_slug, creates the workspace, then breaks the ffmpeg concat list (line-based format), leaving a half-created episode; _concat_entry escapes only the quote character.",
+      "severity": "medium",
+      "status": "residual",
+      "first_round": 2,
+      "reason_unfixed": "below fix threshold (medium/low); logged, not fixed"
+    },
+    {
+      "identifier": "slug-validation-null-byte-uncaught-valueerror",
+      "description": "--name with an embedded NUL passes _validate_slug and Path.mkdir raises a bare ValueError that escapes the PodcastError CLI boundary as a raw traceback.",
+      "severity": "low",
+      "status": "residual",
+      "first_round": 2,
+      "reason_unfixed": "below fix threshold (medium/low); logged, not fixed"
+    }
+  ]
+}
