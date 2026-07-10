@@ -1,5 +1,6 @@
 """Environment smoke tests: can this machine actually run the tool?"""
 
+import os
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -72,10 +73,74 @@ def check_models_dir(config: AppConfig) -> CheckResult:
     return CheckResult(name="models dir", ok=True, detail=str(directory))
 
 
+def check_kokoro(config: AppConfig) -> CheckResult:
+    try:
+        import kokoro_onnx  # noqa: F401  # pyright: ignore[reportUnusedImport]
+    except ImportError as exc:
+        return CheckResult(
+            name="kokoro engine",
+            ok=False,
+            detail=f"kokoro-onnx not importable: {exc}",
+            hint="reinstall the project (`uv sync`)",
+        )
+    models_dir = config.paths.resolved_models_dir()
+    have_files = (models_dir / "kokoro-v1.0.onnx").is_file()
+    detail = "ready" if have_files else "installed; model files download on first use (~310 MB)"
+    return CheckResult(name="kokoro engine", ok=True, detail=detail)
+
+
+def check_qwen3(config: AppConfig) -> CheckResult:
+    if os.environ.get("HSA_OVERRIDE_GFX_VERSION"):
+        return CheckResult(
+            name="qwen3 engine",
+            ok=False,
+            detail="HSA_OVERRIDE_GFX_VERSION is set",
+            hint="unset it — gfx1151 must NOT masquerade as gfx1100 (see README)",
+        )
+    try:
+        import torch  # pyright: ignore[reportMissingImports]
+    except ImportError:
+        return CheckResult(
+            name="qwen3 engine",
+            ok=False,
+            detail="torch not installed",
+            hint="run `uv sync --extra qwen3` to pull TheRock ROCm wheels",
+        )
+    cuda_ok = bool(
+        torch.cuda.is_available()  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
+    )
+    if not cuda_ok:
+        return CheckResult(
+            name="qwen3 engine",
+            ok=False,
+            detail="torch installed but no GPU visible",
+            hint="check TheRock wheel install and amdgpu driver (see README)",
+        )
+    device_name = str(
+        torch.cuda.get_device_name(0)  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
+    )
+    device = config.tts.device or "cuda"
+    return CheckResult(name="qwen3 engine", ok=True, detail=f"{device_name} via {device}")
+
+
+def check_engine(config: AppConfig) -> CheckResult:
+    if config.tts.engine == "kokoro":
+        return check_kokoro(config)
+    if config.tts.engine == "qwen3":
+        return check_qwen3(config)
+    return CheckResult(
+        name="tts engine",
+        ok=False,
+        detail=f"unknown engine {config.tts.engine!r}",
+        hint="set [tts].engine to kokoro or qwen3",
+    )
+
+
 def run_checks(config: AppConfig) -> list[CheckResult]:
-    """All doctor checks; engine-specific checks register here in later phases."""
+    """All doctor checks for the configured setup."""
     return [
         check_ffmpeg(),
         check_episodes_dir(config),
         check_models_dir(config),
+        check_engine(config),
     ]
