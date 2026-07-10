@@ -1,0 +1,72 @@
+# Standards v3 pre-commit template. mypy/pyright/pip-audit/pip-licenses run as local
+# hooks through `uv run` so they see the project's locked dependencies (the mirrored
+# hook envs would type-check/audit against an empty isolated venv instead).
+repos:
+  # General file hygiene
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+      - id: trailing-whitespace
+
+  # Secret detection
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.5.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+
+  # Python: lint + format
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.21
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  # Python: security (bandit; kept alongside ruff S per standards)
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.9.4
+    hooks:
+      - id: bandit
+        args: [-c, pyproject.toml, -ll]
+        additional_dependencies: ["bandit[toml]"]
+        files: ^(src|scripts)/
+
+  # Python: SAST (fast ruleset only — full scan in CI)
+  - repo: https://github.com/returntocorp/semgrep
+    rev: v1.165.0
+    hooks:
+      - id: semgrep
+        args: ['--config', 'p/python', '--error', '--metrics=off']
+
+  # Python: type checking + dependency audits against the real project env
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy (strict)
+        entry: uv run mypy
+        language: system
+        types: [python]
+        pass_filenames: false
+      - id: pyright
+        name: pyright (strict)
+        entry: uv run pyright
+        language: system
+        types: [python]
+        pass_filenames: false
+      - id: pip-audit
+        name: pip-audit (locked env)
+        entry: uv run pip-audit --skip-editable -l
+        language: system
+        pass_filenames: false
+      - id: pip-licenses
+        name: pip-licenses (block GPL-3.0)
+        entry: uv run pip-licenses --fail-on GPL-3.0
+        language: system
+        pass_filenames: false
