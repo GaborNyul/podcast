@@ -9,7 +9,7 @@ from podcast.script import budget
 class TestCalibrationFor:
     def test_known_engine_uses_config(self) -> None:
         config = AppConfig()
-        assert budget.calibration_for(config, "qwen3") == 0.85
+        assert budget.calibration_for(config, "qwen3") == 0.87
 
     def test_unknown_engine_uses_default(self) -> None:
         config = AppConfig()
@@ -27,7 +27,7 @@ class TestWordsForMinutes:
 class TestEpisodeWordBudget:
     def test_uses_config_wpm(self) -> None:
         config = AppConfig()
-        assert budget.episode_word_budget(config, 10, "qwen3") == 1275
+        assert budget.episode_word_budget(config, 10, "qwen3") == 1305
 
 
 class TestEstimatedMinutes:

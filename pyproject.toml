@@ -21,12 +21,14 @@ dependencies = [
     "markitdown[pdf,docx]>=0.1.1",
     "trafilatura>=2.0",
     "kokoro-onnx>=0.4.9",
+    "python-dotenv>=1.2.2",
 ]
 
 [project.optional-dependencies]
 # GPU engine for AMD Strix Halo (gfx1151): torch comes from AMD's TheRock nightly
 # index, pinned to a known-good build (ADR 0004). Linux-only.
 qwen3 = [
+    "qwen-tts>=0.1",  # official Qwen3-TTS inference package (Qwen3TTSModel)
     "torch==2.9.1+rocm7.13.0a20260501",
     "torchaudio==2.9.0+rocm7.13.0a20260501",
     # The ROCm runtime family must be pinned directly: uv applies [tool.uv.sources]
@@ -35,8 +37,6 @@ qwen3 = [
     "rocm-sdk-core==7.13.0a20260501",
     "rocm-sdk-libraries-gfx1151==7.13.0a20260501",
     "triton==3.5.1+rocm7.13.0a20260501",
-    "transformers>=4.51",
-    "soundfile>=0.13",
 ]
 
 [project.scripts]
@@ -125,7 +125,7 @@ plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
 # GPU-only deps from the qwen3 extra; not installed in dev/CI environments.
-module = ["torch", "torch.*", "transformers", "transformers.*"]
+module = ["torch", "torch.*", "transformers", "transformers.*", "qwen_tts", "qwen_tts.*"]
 ignore_missing_imports = true
 
 [tool.pyright]

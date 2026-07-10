@@ -70,9 +70,10 @@ class TestQwen3Benchmark:
         from podcast.tts.qwen3 import Qwen3Engine
 
         engine = Qwen3Engine(AppConfig(tts=TTSSettings(engine="qwen3")))
+        engine.synthesize_line("Warm up.", "Ryan", tmp_path / "warmup.wav")  # load once
         out = tmp_path / "bench.wav"
         started = time.monotonic()
-        engine.synthesize_line(BENCH_TEXT, "Ethan", out)
+        engine.synthesize_line(BENCH_TEXT, "Ryan", out)
         elapsed = time.monotonic() - started
         audio_seconds = _wav_seconds(out)
         words = len(BENCH_TEXT.split())

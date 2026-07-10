@@ -5,8 +5,12 @@ import sys
 from pathlib import Path
 
 import pytest
+from dotenv import load_dotenv
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+# Credentials for tests that talk to real services (e.g. HF_TOKEN for the
+# integration-marked model downloads); never overrides real env vars.
+load_dotenv(REPO_ROOT / ".env", override=False)
 _SCRIPTS_DIR = str(REPO_ROOT / "scripts")
 if _SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_DIR)

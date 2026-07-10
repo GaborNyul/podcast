@@ -40,10 +40,13 @@ repos:
 
   # Python: SAST (fast ruleset only — full scan in CI)
   - repo: https://github.com/returntocorp/semgrep
-    rev: v1.165.0
+    rev: v1.169.0
     hooks:
       - id: semgrep
-        args: ['--config', 'p/python', '--error', '--metrics=off']
+        # --jobs=1 + serial: each OCaml domain wants an io_uring ring, and parallel
+        # rings exhaust the default 8 MB RLIMIT_MEMLOCK (io_uring_queue_init ENOMEM).
+        args: ['--config', 'p/python', '--error', '--metrics=off', '--jobs', '1']
+        require_serial: true
 
   # Python: type checking + dependency audits against the real project env
   - repo: local
@@ -61,8 +64,8 @@ repos:
         types: [python]
         pass_filenames: false
       - id: pip-audit
-        name: pip-audit (locked env)
-        entry: uv run pip-audit --skip-editable -l
+        name: pip-audit (locked PyPI set)
+        entry: uv run python scripts/audit_deps.py
         language: system
         pass_filenames: false
       - id: pip-licenses

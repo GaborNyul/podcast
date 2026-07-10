@@ -1,5 +1,6 @@
 """Tests for podcast.config."""
 
+import os
 from pathlib import Path
 
 import pytest
@@ -119,6 +120,25 @@ class TestLoadConfig:
         config = load_config(project_file=unicode_file)
         assert config.script.hosts[0].name == "Ági"
         assert config.script.hosts[1].persona == "szakértő"
+
+
+class TestDotenvSupport:
+    def test_dotenv_file_feeds_settings_and_process_env(self, isolated_env: Path) -> None:
+        (isolated_env / ".env").write_text("PODCAST_LLM__PROVIDER=fake\n", encoding="utf-8")
+        try:
+            config = load_config()
+            assert config.llm.provider == "fake"
+            assert os.environ["PODCAST_LLM__PROVIDER"] == "fake"
+        finally:
+            os.environ.pop("PODCAST_LLM__PROVIDER", None)
+
+    def test_real_environment_wins_over_dotenv(
+        self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        (isolated_env / ".env").write_text("PODCAST_LLM__PROVIDER=fake\n", encoding="utf-8")
+        monkeypatch.setenv("PODCAST_LLM__PROVIDER", "anthropic")
+        config = load_config()
+        assert config.llm.provider == "anthropic"
 
 
 class TestUserConfigPath:

@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Literal, cast
 
+from dotenv import load_dotenv
 from pydantic import BaseModel, Field, ValidationError
 from pydantic_settings import (
     BaseSettings,
@@ -74,7 +75,10 @@ class TTSSettings(BaseModel):
     engine: str = "qwen3"
     device: str | None = None
     voices: dict[str, str] = Field(default_factory=dict)
-    calibration: dict[str, float] = Field(default_factory=lambda: {"qwen3": 0.85, "kokoro": 0.85})
+    calibration: dict[str, float] = Field(
+        # qwen3: measured 131 rendered wpm on the Strix Halo box (integration benchmark)
+        default_factory=lambda: {"qwen3": 0.87, "kokoro": 0.85}
+    )
 
 
 class AudioSettings(BaseModel):
@@ -162,6 +166,10 @@ def _deep_merge(base: Mapping[str, object], override: Mapping[str, object]) -> d
 
 def load_config(project_file: Path | None = None, user_file: Path | None = None) -> AppConfig:
     """Build the layered AppConfig; raises ConfigError on unreadable/invalid input."""
+    # Pull ./.env into the process environment first (never overriding real env
+    # vars): PODCAST_* settings work from it, and credentials like HF_TOKEN become
+    # visible to the model-download libraries.
+    load_dotenv(Path(".env"), override=False)
     user_path = user_file if user_file is not None else user_config_path()
     project_path = project_file if project_file is not None else project_config_path()
 

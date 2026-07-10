@@ -25,12 +25,14 @@ ENGINE_VOICES: dict[str, list[Voice]] = {
         Voice("bf_emma", "female"),
         Voice("bm_george", "male"),
     ],
-    # Qwen3-TTS speaker names; adjust in [tts.voices] if the model card revises them.
+    # Qwen3-TTS-12Hz CustomVoice speakers (model card); every speaker can speak
+    # English — Ryan/Aiden are the English-native voices.
     "qwen3": [
-        Voice("Cherry", "female"),
-        Voice("Ethan", "male"),
         Voice("Serena", "female"),
-        Voice("Chelsie", "female"),
+        Voice("Ryan", "male"),
+        Voice("Vivian", "female"),
+        Voice("Aiden", "male"),
+        Voice("Sohee", "female"),
     ],
 }
 

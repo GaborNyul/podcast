@@ -52,7 +52,7 @@ jobs:
       - run: uv lock --check
       - run: uv run bandit -c pyproject.toml -ll -r src scripts
       - run: uvx semgrep --config p/python --config p/owasp-top-ten --config p/secrets --error --metrics=off .
-      - run: uv run pip-audit --skip-editable -l
+      - run: uv run python scripts/audit_deps.py
       - run: uv run pip-licenses --fail-on GPL-3.0
 
   contracts:
