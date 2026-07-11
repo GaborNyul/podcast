@@ -1,5 +1,7 @@
 """Typer application: the single CLI boundary where typed errors become exit codes."""
 
+import hashlib
+from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated
 
@@ -18,7 +20,8 @@ from podcast.ingest.tokens import assert_fits_context
 from podcast.llm.registry import create_provider
 from podcast.script import budget as budget_mod
 from podcast.script import pipeline
-from podcast.script.models import Transcript
+from podcast.script.models import Transcript, Turn
+from podcast.tts.base import DialogueEngine, DialogueLine
 from podcast.tts.cache import CacheStats, ensure_segment
 from podcast.tts.registry import available_engines, create_engine
 from podcast.tts.voices import resolve_voices, voices_for
@@ -164,34 +167,82 @@ def _latest_slug(episodes_dir: Path) -> str:
     return newest.parent.name
 
 
+def _dialogue_segments(
+    engine: DialogueEngine,
+    workspace: Workspace,
+    spoken: list[Turn],
+    voices: dict[str, str],
+    composed: Callable[[Turn], str],
+    stats: CacheStats,
+    progress: Progress,
+) -> list[Path]:
+    """Whole-conversation render: any line change re-renders the dialogue, since
+    every line's prosody depends on the lines before it."""
+    lines = [
+        DialogueLine(speaker=turn.speaker, text=turn.text, delivery=composed(turn))
+        for turn in spoken
+    ]
+    digest = hashlib.sha256()
+    for line in lines:
+        for part in (engine.name, voices[line.speaker], line.text, line.delivery):
+            digest.update(part.encode("utf-8"))
+            digest.update(b"\x00")
+    key = digest.hexdigest()[:32]
+    out_paths = [
+        workspace.segments_dir / f"dialogue-{key}-{index:04d}.wav" for index in range(len(lines))
+    ]
+    task = progress.add_task("Synthesizing dialogue", total=1)
+    if all(path.is_file() for path in out_paths):
+        stats.hits += len(lines)
+    else:
+        workspace.segments_dir.mkdir(parents=True, exist_ok=True)
+        engine.synthesize_dialogue(lines, voices, out_paths)
+        stats.misses += len(lines)
+    progress.update(task, completed=1)
+    return out_paths
+
+
 def _run_synthesize(config: AppConfig, workspace: Workspace, progress: Progress) -> CacheStats:
     transcript = load_transcript(workspace)
     engine = create_engine(config)
     voices = resolve_voices(config, engine.name, transcript.hosts)
     stats = CacheStats()
     spoken = [turn for turn in transcript.turns if turn.text.strip()]
-    task = progress.add_task("Synthesizing lines", total=len(spoken))
-    segment_paths: list[Path] = []
     supports_delivery = engine.info().supports_delivery
     styles = {host.name: host.style for host in config.script.hosts}
     tempos = {host.name: host.tempo for host in config.script.hosts}
-    for turn in spoken:
-        voice = voices[turn.speaker]
-        delivery = ""
-        if supports_delivery:
-            parts = (styles.get(turn.speaker, ""), turn.delivery)
-            delivery = "; ".join(part for part in parts if part)
 
-        def render(
-            path: Path, text: str = turn.text, voice_id: str = voice, note: str = delivery
-        ) -> None:
-            engine.synthesize_line(text, voice_id, path, delivery=note)
+    def composed(turn: Turn) -> str:
+        if not supports_delivery:
+            return ""
+        return "; ".join(part for part in (styles.get(turn.speaker, ""), turn.delivery) if part)
 
-        rendered = ensure_segment(
-            workspace.segments_dir, engine.name, voice, turn.text, delivery, render, stats
+    rendered_paths: list[Path] = []
+    if engine.info().dialogue_native and isinstance(engine, DialogueEngine):
+        rendered_paths = _dialogue_segments(
+            engine, workspace, spoken, voices, composed, stats, progress
         )
-        segment_paths.append(tempo_variant(rendered, tempos.get(turn.speaker, 1.0)))
-        progress.advance(task)
+    else:
+        task = progress.add_task("Synthesizing lines", total=len(spoken))
+        for turn in spoken:
+            voice = voices[turn.speaker]
+            delivery = composed(turn)
+
+            def render(
+                path: Path, text: str = turn.text, voice_id: str = voice, note: str = delivery
+            ) -> None:
+                engine.synthesize_line(text, voice_id, path, delivery=note)
+
+            rendered_paths.append(
+                ensure_segment(
+                    workspace.segments_dir, engine.name, voice, turn.text, delivery, render, stats
+                )
+            )
+            progress.advance(task)
+    segment_paths = [
+        tempo_variant(path, tempos.get(turn.speaker, 1.0))
+        for path, turn in zip(rendered_paths, spoken, strict=True)
+    ]
 
     assemble_task = progress.add_task("Assembling episode", total=1)
     assemble_episode(

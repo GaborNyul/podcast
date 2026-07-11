@@ -10,8 +10,8 @@ from podcast.tts.qwen3 import Qwen3Engine
 
 
 class TestAvailableEngines:
-    def test_lists_both_engines(self) -> None:
-        assert registry.available_engines() == ["kokoro", "qwen3"]
+    def test_lists_all_engines(self) -> None:
+        assert registry.available_engines() == ["kokoro", "qwen3", "soulx"]
 
 
 class TestCreateEngine:
@@ -22,6 +22,14 @@ class TestCreateEngine:
     def test_qwen3_constructs_without_torch(self) -> None:
         config = AppConfig(tts=TTSSettings(engine="qwen3"))
         assert isinstance(registry.create_engine(config), Qwen3Engine)
+
+    def test_soulx_constructs_without_torch(self) -> None:
+        from podcast.tts.soulx import SoulXEngine
+
+        config = AppConfig(tts=TTSSettings(engine="soulx"))
+        engine = registry.create_engine(config)
+        assert isinstance(engine, SoulXEngine)
+        assert engine.info().dialogue_native is True
 
     def test_unknown_engine_raises_with_available(self) -> None:
         config = AppConfig(tts=TTSSettings(engine="sirens"))
