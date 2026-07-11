@@ -282,6 +282,29 @@ class TestSynthesizeCommand:
         assert "warm, curious" in engine.deliveries  # annotated lines carry their note
         assert "" in engine.deliveries  # neutral lines stay neutral
 
+    def test_host_style_is_composed_with_delivery_notes(
+        self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _generate_episode(isolated_env, monkeypatch)
+        (isolated_env / "podcast.toml").write_text(
+            '[llm]\nprovider = "fake"\n'
+            "[[script.hosts]]\n"
+            'name = "Alex"\ngender = "male"\npersona = "companion"\n'
+            'style = "Speak at a fast, energetic pace."\n'
+            "[[script.hosts]]\n"
+            'name = "Maya"\ngender = "female"\npersona = "guide"\n'
+            'style = "Bright and lively."\n',
+            encoding="utf-8",
+        )
+        engine = _FakeEngine(supports_delivery=True)
+        monkeypatch.setattr(app_mod, "create_engine", _engine_factory(engine))
+        _fake_assemble(monkeypatch)
+        result = runner.invoke(app_mod.app, ["synthesize", "demo"])
+        assert result.exit_code == 0, result.output
+        # Alex's lines carry a note -> style composed with it; Maya's are plain -> style alone.
+        assert "Speak at a fast, energetic pace.; warm, curious" in engine.deliveries
+        assert "Bright and lively." in engine.deliveries
+
     def test_delivery_notes_are_blanked_for_non_supporting_engine(
         self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

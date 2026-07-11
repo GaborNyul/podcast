@@ -20,6 +20,11 @@ range; (3) NotebookLM's script pipeline ends with a dedicated disfluency-injecti
   interruptions (trailing dash) 0.4, backchannels (≤4-word reply) 0.5, question hand-offs
   0.7, ellipses 1.4, else 1.0. `assemble_episode` accepts `gap_scales` and multiplies the
   sampled pause; silences still round to the 50 ms reuse grid.
+- `HostSpec.style` is a per-host baseline performance direction composed with each line's
+  delivery note (`"style; note"`) before it reaches a delivery-capable engine. Measured
+  motivation: the vivian voice reads English at ~116 wpm while ryan reads ~159; the instruct
+  "Speak at a fast, energetic pace." lifts vivian to ~148 wpm. The composed string joins the
+  cache key, so changing a host's style re-renders that host's lines.
 - `polish_dialogue` (gated by `script.polish_pass`, default on) rewrites the whole draft
   once for radio texture — disfluencies, interruptions, breaking up stacked long turns,
   sharpening delivery notes — with facts, attributions, and rituals pinned by `POLISH_BRIEF`

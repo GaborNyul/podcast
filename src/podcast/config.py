@@ -23,6 +23,9 @@ class HostSpec(BaseModel):
     name: str
     gender: Literal["male", "female"]
     persona: str
+    # Baseline performance direction for delivery-capable TTS engines, composed
+    # with each line's delivery note (e.g. "Speak at a fast, energetic pace.").
+    style: str = ""
 
     @field_validator("name")
     @classmethod

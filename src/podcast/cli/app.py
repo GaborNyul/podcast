@@ -173,9 +173,13 @@ def _run_synthesize(config: AppConfig, workspace: Workspace, progress: Progress)
     task = progress.add_task("Synthesizing lines", total=len(spoken))
     segment_paths: list[Path] = []
     supports_delivery = engine.info().supports_delivery
+    styles = {host.name: host.style for host in config.script.hosts}
     for turn in spoken:
         voice = voices[turn.speaker]
-        delivery = turn.delivery if supports_delivery else ""
+        delivery = ""
+        if supports_delivery:
+            parts = (styles.get(turn.speaker, ""), turn.delivery)
+            delivery = "; ".join(part for part in parts if part)
 
         def render(
             path: Path, text: str = turn.text, voice_id: str = voice, note: str = delivery

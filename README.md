@@ -69,6 +69,7 @@ persona = "the companion (curious co-host): asks stake-bearing questions, pushes
 name = "Maya"
 gender = "female"
 persona = "the guide (lead explainer): explains with vivid analogies and concrete examples"
+style = "Speak at a fast, energetic pace."  # baseline instruct for delivery-capable engines
 
 [tts]
 engine = "qwen3"                           # qwen3 (GPU) | kokoro (CPU)
