@@ -79,7 +79,7 @@ def shim_torchaudio() -> None:
 
     def _load(path: object, *_args: object, **_kwargs: object) -> tuple[Any, int]:
         data, sr = soundfile.read(str(path), dtype="float32", always_2d=True)  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
-        return torch.from_numpy(data.T), int(sr)  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType]
+        return torch.from_numpy(data.T), int(sr)  # pyright: ignore[reportUnknownMemberType, reportUnknownArgumentType, reportUnknownVariableType]
 
     def _save(path: object, tensor: Any, sample_rate: int, **_kwargs: object) -> None:
         soundfile.write(str(path), tensor.detach().cpu().numpy().T, sample_rate)  # pyright: ignore[reportUnknownMemberType]
@@ -145,7 +145,7 @@ class SoulXEngine:
                 )
             except ImportError as exc:
                 raise TTSError(f"SoulX source at {repo} failed to import: {exc}") from exc
-            weights: str = snapshot_download(MODEL_ID, revision=MODEL_REVISION)
+            weights = str(snapshot_download(MODEL_ID, revision=MODEL_REVISION))
             model, dataset = initiate_model(986, weights, "hf", False)  # pyright: ignore[reportUnknownVariableType]
             self._model = cast("DialogueModel", model)
             self._dataset = dataset
