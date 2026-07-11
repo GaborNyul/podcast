@@ -9,15 +9,15 @@ from podcast.llm.base import ChatMessage, ChatProvider, system, user
 from podcast.llm.structured import complete_structured
 from podcast.script.budget import within_tolerance
 from podcast.script.models import DialogueChunk, Outline, Transcript, Turn
+from podcast.script.prompts import (
+    CONTINUING_POSITION,
+    FINAL_POSITION,
+    OPENING_POSITION,
+    OUTLINE_BRIEF,
+    SYSTEM_PROMPT,
+)
 
 _CONTEXT_TURNS = 2
-
-SYSTEM_PROMPT = (
-    "You write English two-host podcast dialogue grounded STRICTLY in the provided "
-    "sources — never invent facts. The tone is a natural, engaging conversation: "
-    "hosts react to each other, ask questions, and use plain spoken language. "
-    "No stage directions, no sound-effect notes, no markdown inside spoken lines."
-)
 
 
 def _hosts_brief(config: AppConfig) -> str:
@@ -55,7 +55,7 @@ def build_outline(
             f"The full dialogue must total approximately {budget_words} words. "
             "Break the episode into 3-6 segments; give each a heading, notes on what "
             "to cover (with source references), and a target_words share. The "
-            f"target_words values must sum to {budget_words}."
+            f"target_words values must sum to {budget_words}. {OUTLINE_BRIEF}"
         ),
     ]
     outline = complete_structured(
@@ -123,13 +123,9 @@ def write_dialogue(
     turns: list[Turn] = []
     for index, segment in enumerate(outline.segments):
         previous = "\n".join(f"**{turn.speaker}:** {turn.text}" for turn in turns[-_CONTEXT_TURNS:])
-        position = (
-            "opening the episode with a warm welcome"
-            if index == 0
-            else "continuing mid-episode (do NOT re-introduce the show)"
-        )
+        position = OPENING_POSITION if index == 0 else CONTINUING_POSITION
         if index == len(outline.segments) - 1:
-            position += "; this final segment must wrap up and sign off"
+            position += FINAL_POSITION
         messages = [
             system(SYSTEM_PROMPT),
             user(

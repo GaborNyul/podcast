@@ -25,3 +25,6 @@ mutants/
 episodes/
 *.wav
 *.mp3
+
+# Local machine config (layered over defaults; see README)
+podcast.toml

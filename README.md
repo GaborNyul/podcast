@@ -60,11 +60,11 @@ default_minutes = 10
 [[script.hosts]]
 name = "Alex"
 gender = "male"
-persona = "curious generalist host who asks sharp questions"
+persona = "the companion (curious co-host): asks stake-bearing questions, pushes back"
 [[script.hosts]]
 name = "Maya"
 gender = "female"
-persona = "expert co-host who explains with vivid analogies"
+persona = "the guide (lead explainer): explains with vivid analogies and concrete examples"
 
 [tts]
 engine = "qwen3"                           # qwen3 (GPU) | kokoro (CPU)

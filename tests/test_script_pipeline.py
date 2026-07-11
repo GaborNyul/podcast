@@ -9,7 +9,7 @@ from podcast.config import AppConfig
 from podcast.errors import ScriptError
 from podcast.llm.base import ChatMessage
 from podcast.llm.fake import FakeProvider
-from podcast.script import pipeline
+from podcast.script import pipeline, prompts
 from podcast.script.models import Outline, OutlineSegment, Transcript, Turn
 
 SOURCES = "## Source 1: Ants\n\nAnts are fascinating."
@@ -22,6 +22,7 @@ class _ScriptedProvider:
         self.replies = list(replies)
         self.schemas: list[Mapping[str, object] | None] = []
         self.prompts: list[str] = []
+        self.systems: list[str] = []
 
     def complete(
         self,
@@ -33,6 +34,7 @@ class _ScriptedProvider:
         del temperature
         self.schemas.append(json_schema)
         self.prompts.append(messages[-2].content if len(messages) >= 2 else "")
+        self.systems.append(messages[0].content if messages[0].role == "system" else "")
         return self.replies.pop(0)
 
 
@@ -72,6 +74,14 @@ class TestBuildOutline:
         provider = _ScriptedProvider([reply])
         outline = pipeline.build_outline(provider, AppConfig(), SOURCES, 100)
         assert outline.total_words() == 100
+
+    def test_prompt_carries_deep_dive_system_arc_and_coverage(self) -> None:
+        reply = json.dumps({"title": "T", "segments": [{"heading": "a", "target_words": 50}]})
+        provider = _ScriptedProvider([reply])
+        pipeline.build_outline(provider, AppConfig(), SOURCES, 50)
+        assert provider.systems[0] == prompts.SYSTEM_PROMPT
+        assert prompts.OUTLINE_BRIEF in provider.prompts[0]
+        assert "approximately 50 words" in provider.prompts[0]
 
 
 class TestWriteDialogue:
@@ -136,6 +146,27 @@ class TestWriteDialogue:
         assert "context line" in provider.prompts[1]
         assert "wrap up" in provider.prompts[1]
 
+    def test_position_hints_carry_deep_dive_rituals(self) -> None:
+        config = AppConfig()
+        outline = Outline(
+            title="T",
+            segments=[
+                OutlineSegment(heading="one", target_words=60),
+                OutlineSegment(heading="two", target_words=60),
+                OutlineSegment(heading="three", target_words=60),
+            ],
+        )
+        turn = {"speaker": "Alex", "text": "line"}
+        reply = json.dumps({"turns": [turn]})
+        provider = _ScriptedProvider([reply, reply, reply])
+        pipeline.write_dialogue(provider, config, SOURCES, outline)
+        assert provider.systems[0] == prompts.SYSTEM_PROMPT
+        assert prompts.OPENING_POSITION in provider.prompts[0]
+        assert prompts.FINAL_POSITION not in provider.prompts[0]
+        assert prompts.CONTINUING_POSITION in provider.prompts[1]
+        assert prompts.FINAL_POSITION not in provider.prompts[1]
+        assert prompts.CONTINUING_POSITION + prompts.FINAL_POSITION in provider.prompts[2]
+
 
 class TestEnsureLength:
     def _transcript(self, words: int) -> Transcript:
@@ -157,6 +188,7 @@ class TestEnsureLength:
         result = pipeline.ensure_length(provider, AppConfig(), transcript, 100)
         assert result.word_count() == 100
         assert "Expand" in provider.prompts[0]
+        assert provider.systems[0] == prompts.SYSTEM_PROMPT
 
     def test_long_script_is_compressed(self) -> None:
         transcript = self._transcript(200)

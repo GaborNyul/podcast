@@ -31,16 +31,17 @@ def _default_hosts() -> list[HostSpec]:
             name="Alex",
             gender="male",
             persona=(
-                "curious generalist host who steers the conversation, asks sharp "
-                "questions, and keeps things grounded for newcomers"
+                "the companion (curious co-host): the listener's proxy who asks "
+                "stake-bearing questions, echoes surprising details back, and pushes "
+                "back when something sounds too neat"
             ),
         ),
         HostSpec(
             name="Maya",
             gender="female",
             persona=(
-                "expert co-host who explains the material with vivid analogies "
-                "and concrete examples"
+                "the guide (lead explainer): expert co-host in easy command of the "
+                "material who explains through vivid analogies and concrete examples"
             ),
         ),
     ]
