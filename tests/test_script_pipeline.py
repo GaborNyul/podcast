@@ -122,6 +122,22 @@ class TestWriteDialogue:
         with pytest.raises(ScriptError, match="unknown speaker 'Narrator'"):
             pipeline.write_dialogue(provider, config, SOURCES, outline)
 
+    def test_speaker_echoing_quoted_note_notation_is_resolved(self) -> None:
+        config = AppConfig()
+        outline = Outline(title="T", segments=[OutlineSegment(heading="only", target_words=60)])
+        reply = json.dumps({"turns": [{"speaker": "alex [warm, curious]", "text": "hi"}]})
+        provider = _ScriptedProvider([reply])
+        transcript = pipeline.write_dialogue(provider, config, SOURCES, outline)
+        assert transcript.turns[0].speaker == "Alex"
+
+    def test_unknown_speaker_with_note_suffix_still_raises(self) -> None:
+        config = AppConfig()
+        outline = Outline(title="T", segments=[OutlineSegment(heading="only", target_words=60)])
+        reply = json.dumps({"turns": [{"speaker": "Narrator [warm]", "text": "hi"}]})
+        provider = _ScriptedProvider([reply])
+        with pytest.raises(ScriptError, match=r"unknown speaker 'Narrator \[warm\]'"):
+            pipeline.write_dialogue(provider, config, SOURCES, outline)
+
     def test_empty_segment_raises_script_error(self) -> None:
         config = AppConfig()
         outline = Outline(title="T", segments=[OutlineSegment(heading="only", target_words=60)])
@@ -145,6 +161,25 @@ class TestWriteDialogue:
         assert "warm welcome" in provider.prompts[0]
         assert "context line" in provider.prompts[1]
         assert "wrap up" in provider.prompts[1]
+
+    def test_delivery_notes_survive_and_reach_segment_context(self) -> None:
+        config = AppConfig()
+        outline = Outline(
+            title="T",
+            segments=[
+                OutlineSegment(heading="one", target_words=60),
+                OutlineSegment(heading="two", target_words=60),
+            ],
+        )
+        noted = {"speaker": "Alex", "text": "Get this.", "delivery": "excited, leaning in"}
+        plain = {"speaker": "Maya", "text": "Go on."}
+        provider = _ScriptedProvider(
+            [json.dumps({"turns": [noted]}), json.dumps({"turns": [plain]})]
+        )
+        transcript = pipeline.write_dialogue(provider, config, SOURCES, outline)
+        assert transcript.turns[0].delivery == "excited, leaning in"
+        assert transcript.turns[1].delivery == ""
+        assert "**Alex [excited, leaning in]:** Get this." in provider.prompts[1]
 
     def test_position_hints_carry_deep_dive_rituals(self) -> None:
         config = AppConfig()
@@ -197,6 +232,19 @@ class TestEnsureLength:
         result = pipeline.ensure_length(provider, AppConfig(), transcript, 100)
         assert result.word_count() == 100
         assert "Compress" in provider.prompts[0]
+
+    def test_repair_prompt_and_result_carry_delivery_notes(self) -> None:
+        transcript = Transcript(
+            title="T",
+            hosts=["Alex", "Maya"],
+            turns=[Turn(speaker="Alex", text="w " * 50, delivery="wry")],
+        )
+        repaired_turns = [{"speaker": "Maya", "text": "word " * 100, "delivery": "calm"}]
+        provider = _ScriptedProvider([json.dumps({"turns": repaired_turns})])
+        result = pipeline.ensure_length(provider, AppConfig(), transcript, 100)
+        assert "**Alex [wry]:**" in provider.prompts[0]
+        assert "never count them" in provider.prompts[0]  # notes excluded from word math
+        assert result.turns[0].delivery == "calm"
 
     def test_worse_repair_is_discarded(self) -> None:
         transcript = self._transcript(80)

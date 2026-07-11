@@ -194,5 +194,14 @@ class TestAppConfig:
         with pytest.raises(ValueError, match="gender"):
             HostSpec(name="X", gender="robot", persona="beep")  # pyright: ignore[reportArgumentType]
 
+    @pytest.mark.parametrize("name", ["Alex [AI]", "co]host", "DJ: Live"])
+    def test_host_spec_rejects_script_grammar_characters(self, name: str) -> None:
+        with pytest.raises(ValueError, match="may not contain"):
+            HostSpec(name=name, gender="male", persona="p")
+
+    def test_host_spec_rejects_blank_name(self) -> None:
+        with pytest.raises(ValueError, match="must not be blank"):
+            HostSpec(name="   ", gender="male", persona="p")
+
     def test_module_exposes_no_mutable_singleton(self) -> None:
         assert not hasattr(config_mod, "CONFIG")

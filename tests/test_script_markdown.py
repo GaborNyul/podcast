@@ -7,14 +7,17 @@ from hypothesis import strategies as st
 from podcast.errors import ScriptError
 from podcast.script.markdown import (
     markdown_to_transcript,
+    normalize_delivery,
     normalize_turn_text,
     transcript_to_markdown,
+    turn_to_line,
 )
 from podcast.script.models import Transcript, Turn
 
 _HOSTS = ["Alex", "Maya"]
 
 _turn_text = st.text(min_size=0, max_size=200).map(normalize_turn_text)
+_deliveries = st.text(min_size=0, max_size=60).map(normalize_delivery)
 _titles = st.text(min_size=1, max_size=80).filter(lambda value: value.strip() != "")
 
 
@@ -24,6 +27,7 @@ def _transcripts() -> st.SearchStrategy[Transcript]:
             Turn,
             speaker=st.sampled_from(_HOSTS),
             text=_turn_text,
+            delivery=_deliveries,
         ),
         max_size=20,
     )
@@ -63,6 +67,23 @@ class TestTranscriptToMarkdown:
         assert text.startswith('---\ntitle: "Ants"\nhosts: ["Alex", "Maya"]\n---\n')
         assert "**Alex:** Hi." in text
         assert "Edit freely" in text
+
+    def test_delivery_note_rides_in_the_speaker_token(self) -> None:
+        transcript = Transcript(
+            title="T",
+            hosts=_HOSTS,
+            turns=[Turn(speaker="Maya", text="Get this.", delivery="excited, leaning in")],
+        )
+        assert "**Maya [excited, leaning in]:** Get this." in transcript_to_markdown(transcript)
+
+
+class TestTurnToLine:
+    def test_empty_delivery_keeps_plain_format(self) -> None:
+        assert turn_to_line(Turn(speaker="Alex", text="Hi.")) == "**Alex:** Hi."
+
+    def test_grammar_breaking_characters_are_dropped_from_delivery(self) -> None:
+        line = turn_to_line(Turn(speaker="Alex", text="Hi.", delivery="wry: [aside] beat"))
+        assert line == "**Alex [wry aside beat]:** Hi."
 
 
 class TestMarkdownToTranscript:
@@ -121,6 +142,37 @@ class TestMarkdownToTranscript:
         transcript = markdown_to_transcript(text)
         assert transcript.turns[0].text == "I rewrote this line by hand!"
 
+    def test_delivery_note_is_parsed_from_speaker_token(self) -> None:
+        text = (
+            '---\ntitle: "T"\nhosts: ["Alex", "Maya"]\n---\n\n'
+            "**Alex [skeptical,  slowing down]:** Hold on.\n"
+        )
+        turn = markdown_to_transcript(text).turns[0]
+        assert turn.speaker == "Alex"
+        assert turn.delivery == "skeptical, slowing down"
+        assert turn.text == "Hold on."
+
+    def test_empty_brackets_mean_no_delivery(self) -> None:
+        text = '---\ntitle: "T"\nhosts: ["Alex", "Maya"]\n---\n\n**Alex []:** hi\n'
+        turn = markdown_to_transcript(text).turns[0]
+        assert turn.speaker == "Alex"
+        assert turn.delivery == ""
+
+    def test_unknown_host_with_delivery_raises(self) -> None:
+        text = '---\ntitle: "T"\nhosts: ["Alex", "Maya"]\n---\n\n**Zed [warm]:** hello\n'
+        with pytest.raises(ScriptError, match="unknown host 'Zed \\[warm\\]'"):
+            markdown_to_transcript(text)
+
+    def test_host_name_with_grammar_characters_is_rejected(self) -> None:
+        text = '---\ntitle: "T"\nhosts: ["Alex [AI]", "Maya"]\n---\n\n**Maya:** hi\n'
+        with pytest.raises(ScriptError, match="may not contain"):
+            markdown_to_transcript(text)
+
+    def test_host_name_with_colon_is_rejected(self) -> None:
+        text = '---\ntitle: "T"\nhosts: ["DJ: Live", "Maya"]\n---\n\n**Maya:** hi\n'
+        with pytest.raises(ScriptError, match="may not contain"):
+            markdown_to_transcript(text)
+
 
 class TestNormalizeTurnText:
     def test_collapses_whitespace(self) -> None:
@@ -128,3 +180,15 @@ class TestNormalizeTurnText:
 
     def test_empty_stays_empty(self) -> None:
         assert normalize_turn_text("  \n ") == ""
+
+
+class TestNormalizeDelivery:
+    def test_collapses_whitespace(self) -> None:
+        assert normalize_delivery(" warm,\n curious ") == "warm, curious"
+
+    def test_drops_grammar_breaking_characters(self) -> None:
+        assert normalize_delivery("a[b]c:d") == "a b c d"
+
+    def test_is_idempotent(self) -> None:
+        once = normalize_delivery("odd: [note]")
+        assert normalize_delivery(once) == once

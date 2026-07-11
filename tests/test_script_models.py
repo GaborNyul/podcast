@@ -29,6 +29,12 @@ class TestTranscript:
         )
         assert not hasattr(transcript, "confidence")
 
+    def test_turn_delivery_defaults_empty_and_never_counts_as_words(self) -> None:
+        turn = Turn(speaker="A", text="one two", delivery="excited, racing ahead")
+        assert Turn(speaker="A", text="x").delivery == ""
+        transcript = Transcript(title="T", hosts=["A", "B"], turns=[turn])
+        assert transcript.word_count() == 2
+
 
 class TestOutline:
     def test_total_words(self) -> None:

@@ -13,6 +13,7 @@ class EngineInfo:
     device: str
     sample_rate: int
     dialogue_native: bool = False
+    supports_delivery: bool = False
 
 
 @runtime_checkable
@@ -23,6 +24,10 @@ class TTSEngine(Protocol):
 
     def info(self) -> EngineInfo: ...
 
-    def synthesize_line(self, text: str, voice: str, out_path: Path) -> None:
-        """Render one spoken line to a WAV file at `out_path`."""
+    def synthesize_line(self, text: str, voice: str, out_path: Path, *, delivery: str = "") -> None:
+        """Render one spoken line to a WAV file at `out_path`.
+
+        `delivery` is a short performance note (tone, pace, emotional register);
+        engines that cannot act on it declare `supports_delivery=False` and ignore it.
+        """
         ...

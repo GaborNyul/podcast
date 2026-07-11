@@ -25,11 +25,13 @@ class _FakeModel:
         return cls()
 
     def generate_custom_voice(
-        self, *, text: str, language: str, speaker: str
+        self, *, text: str, language: str, speaker: str, instruct: str | None = None
     ) -> tuple[list[list[float]], int]:
         if _FakeModel.fail:
             raise RuntimeError("hip error")
-        _FakeModel.generate_calls.append({"text": text, "language": language, "speaker": speaker})
+        _FakeModel.generate_calls.append(
+            {"text": text, "language": language, "speaker": speaker, "instruct": instruct}
+        )
         if _FakeModel.empty:
             return [], 24000
         return [[0.0, 0.1, -0.1]], 24000
@@ -64,6 +66,7 @@ class TestQwen3Engine:
         engine = qwen3.Qwen3Engine(AppConfig())
         assert engine.info().device == "cuda"
         assert engine.info().sample_rate == qwen3.SAMPLE_RATE
+        assert engine.info().supports_delivery is True
 
     def test_device_override_from_config(self) -> None:
         config = AppConfig(tts=TTSSettings(device="cpu"))
@@ -90,6 +93,7 @@ class TestQwen3Engine:
             "text": "hello",
             "language": "English",
             "speaker": "Ryan",
+            "instruct": None,
         }
         with wave.open(str(out), "rb") as handle:
             assert handle.getnframes() == 3
@@ -113,6 +117,24 @@ class TestQwen3Engine:
         engine = qwen3.Qwen3Engine(AppConfig())
         engine.synthesize_line("hello", "Ryan", tmp_path / "x.wav")
         assert engine.info().device == "cpu"
+
+    def test_delivery_note_is_forwarded_as_instruct(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _install_fakes(monkeypatch, cuda_available=True)
+        engine = qwen3.Qwen3Engine(AppConfig())
+        engine.synthesize_line(
+            "hello", "Ryan", tmp_path / "x.wav", delivery="excited, racing ahead"
+        )
+        assert _FakeModel.generate_calls[0]["instruct"] == "excited, racing ahead"
+
+    def test_blank_delivery_note_becomes_no_instruct(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _install_fakes(monkeypatch, cuda_available=True)
+        engine = qwen3.Qwen3Engine(AppConfig())
+        engine.synthesize_line("hello", "Ryan", tmp_path / "x.wav", delivery="   ")
+        assert _FakeModel.generate_calls[0]["instruct"] is None
 
     def test_model_loads_once(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         _install_fakes(monkeypatch, cuda_available=True)

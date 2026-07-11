@@ -145,15 +145,23 @@ class TestGenerateCommand:
 class _FakeEngine:
     name = "kokoro"
 
-    def __init__(self) -> None:
+    def __init__(self, *, supports_delivery: bool = False) -> None:
         self.renders = 0
+        self.deliveries: list[str] = []
+        self.supports_delivery = supports_delivery
 
     def info(self) -> EngineInfo:
-        return EngineInfo(name="kokoro", device="cpu", sample_rate=24000)
+        return EngineInfo(
+            name="kokoro",
+            device="cpu",
+            sample_rate=24000,
+            supports_delivery=self.supports_delivery,
+        )
 
-    def synthesize_line(self, text: str, voice: str, out_path: Path) -> None:
+    def synthesize_line(self, text: str, voice: str, out_path: Path, *, delivery: str = "") -> None:
         del text, voice
         self.renders += 1
+        self.deliveries.append(delivery)
         out_path.write_bytes(b"RIFF-fake")
 
 
@@ -227,10 +235,72 @@ class TestSynthesizeCommand:
         script = workspace / "script.md"
         lines = script.read_text(encoding="utf-8").splitlines()
         for index, line in enumerate(lines):
-            if line.startswith("**Alex:**"):
+            if line.startswith("**Alex"):
                 lines[index] = "**Alex:** A brand new hand-edited opening line."
                 break
         script.write_text("\n".join(lines), encoding="utf-8")
+        result = runner.invoke(app_mod.app, ["synthesize", "demo"])
+        assert result.exit_code == 0
+        assert engine.renders == baseline + 1
+
+    def test_delivery_notes_reach_a_supporting_engine(
+        self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _generate_episode(isolated_env, monkeypatch)
+        engine = _FakeEngine(supports_delivery=True)
+        monkeypatch.setattr(app_mod, "create_engine", _engine_factory(engine))
+        _fake_assemble(monkeypatch)
+        result = runner.invoke(app_mod.app, ["synthesize", "demo"])
+        assert result.exit_code == 0, result.output
+        assert "warm, curious" in engine.deliveries  # annotated lines carry their note
+        assert "" in engine.deliveries  # neutral lines stay neutral
+
+    def test_delivery_notes_are_blanked_for_non_supporting_engine(
+        self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _generate_episode(isolated_env, monkeypatch)
+        engine = _FakeEngine()
+        monkeypatch.setattr(app_mod, "create_engine", _engine_factory(engine))
+        _fake_assemble(monkeypatch)
+        result = runner.invoke(app_mod.app, ["synthesize", "demo"])
+        assert result.exit_code == 0, result.output
+        assert engine.renders > 0
+        assert set(engine.deliveries) == {""}
+
+    def test_edited_delivery_note_is_free_on_non_supporting_engine(
+        self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        workspace = _generate_episode(isolated_env, monkeypatch)
+        engine = _FakeEngine()
+        monkeypatch.setattr(app_mod, "create_engine", _engine_factory(engine))
+        _fake_assemble(monkeypatch)
+        runner.invoke(app_mod.app, ["synthesize", "demo"])
+        baseline = engine.renders
+        script = workspace / "script.md"
+        content = script.read_text(encoding="utf-8")
+        assert "[warm, curious]" in content
+        script.write_text(
+            content.replace("[warm, curious]", "[deadpan, slower]", 1), encoding="utf-8"
+        )
+        result = runner.invoke(app_mod.app, ["synthesize", "demo"])
+        assert result.exit_code == 0
+        assert engine.renders == baseline  # note is not in the cache key -> all hits
+
+    def test_edited_delivery_note_rerenders_only_one_segment(
+        self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        workspace = _generate_episode(isolated_env, monkeypatch)
+        engine = _FakeEngine(supports_delivery=True)
+        monkeypatch.setattr(app_mod, "create_engine", _engine_factory(engine))
+        _fake_assemble(monkeypatch)
+        runner.invoke(app_mod.app, ["synthesize", "demo"])
+        baseline = engine.renders
+        script = workspace / "script.md"
+        content = script.read_text(encoding="utf-8")
+        assert "[warm, curious]" in content
+        script.write_text(
+            content.replace("[warm, curious]", "[deadpan, slower]", 1), encoding="utf-8"
+        )
         result = runner.invoke(app_mod.app, ["synthesize", "demo"])
         assert result.exit_code == 0
         assert engine.renders == baseline + 1

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Literal, cast
 
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field, ValidationError, field_validator
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -23,6 +23,17 @@ class HostSpec(BaseModel):
     name: str
     gender: Literal["male", "female"]
     persona: str
+
+    @field_validator("name")
+    @classmethod
+    def _name_fits_script_grammar(cls, value: str) -> str:
+        """Host names anchor the `**Host [note]:** text` script.md line grammar
+        (ADR 0010), so the grammar's own characters cannot appear in them."""
+        if not value.strip():
+            raise ValueError("host name must not be blank")
+        if any(character in value for character in "[]:"):
+            raise ValueError(f"host name {value!r} may not contain '[', ']' or ':'")
+        return value
 
 
 def _default_hosts() -> list[HostSpec]:

@@ -15,6 +15,9 @@ docs (txt/md/html/pdf/docx) ──▶ podcast generate ──▶ episodes/<slug>
   the per-line segment cache means editing one line re-renders one line.
 - **Hardware-aware** — Qwen3-TTS on an AMD Strix Halo GPU for quality, Kokoro-82M on
   CPU everywhere else.
+- **Expressive delivery** — each line can carry a performance note
+  (`**Maya [excited, leaning in]:** Get this...`); the qwen3 engine performs it via
+  Qwen3-TTS instruction control, engines without that ability ignore it (ADR 0010).
 
 ## Install
 
@@ -32,7 +35,8 @@ uv run podcast doctor   # verify ffmpeg, workspace, and the configured engine
 # 1. Generate an editable script from documents (10 minutes by default)
 uv run podcast generate paper.pdf notes.md -d 15
 
-# 2. Open episodes/<slug>/script.md, tweak any lines you like
+# 2. Open episodes/<slug>/script.md, tweak any lines you like — including the
+#    [delivery notes] that steer tone and pace on the qwen3 engine
 
 # 3. Render the audio (only edited lines are re-synthesized on re-runs)
 uv run podcast synthesize

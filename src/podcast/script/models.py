@@ -4,12 +4,20 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class Turn(BaseModel):
-    """One spoken line."""
+    """One spoken line, optionally with a performance note for the voice engine."""
 
     model_config = ConfigDict(extra="ignore")
 
     speaker: str
     text: str
+    delivery: str = Field(
+        default="",
+        description=(
+            "Short performance note for the voice engine (tone, pace, emotional "
+            "register — e.g. 'excited, racing ahead'); never spoken; empty for a "
+            "neutral read."
+        ),
+    )
 
 
 class Transcript(BaseModel):

@@ -177,6 +177,16 @@ class TestComplete:
         speakers = {turn["speaker"] for turn in json.loads(reply)["turns"]}
         assert speakers == {"Host A", "Host B"}
 
+    def test_dialogue_mixes_annotated_and_neutral_deliveries(self) -> None:
+        reply = FakeProvider().complete(
+            [user("Write dialogue of approximately 120 words.")],
+            temperature=0.8,
+            json_schema=DIALOGUE_SCHEMA,
+        )
+        deliveries = [turn["delivery"] for turn in json.loads(reply)["turns"]]
+        assert "warm, curious" in deliveries
+        assert "" in deliveries
+
     def test_deterministic_across_calls(self) -> None:
         messages = [user("Write dialogue of approximately 100 words.")]
         first = FakeProvider().complete(messages, temperature=0.8, json_schema=DIALOGUE_SCHEMA)

@@ -3,7 +3,9 @@
 Contract with the script pipeline (kept in sync with `podcast.script`): prompts
 state word targets as "approximately N words"; the outline schema exposes a
 "segments" property; the dialogue schema exposes a "turns" property whose
-`speaker` field is an enum of host names.
+`speaker` field is an enum of host names and whose `delivery` field carries the
+per-turn performance note (this provider emits a deterministic mix of annotated
+and neutral turns so the delivery path is exercised offline).
 """
 
 import json
@@ -16,6 +18,8 @@ from podcast.llm.base import ChatMessage
 _WORDS_RE = re.compile(r"approximately (\d+) words")
 _DEFAULT_WORDS = 300
 _WORDS_PER_TURN = 30
+
+_DELIVERIES = ("warm, curious", "", "excited, picking up speed", "")
 
 _VOCAB = [
     "the",
@@ -158,6 +162,7 @@ class FakeProvider:
                 "text": _prose(
                     base + (remainder if index == turn_count - 1 else 0), offset=index * 7
                 ),
+                "delivery": _DELIVERIES[index % len(_DELIVERIES)],
             }
             for index in range(turn_count)
         ]

@@ -85,7 +85,8 @@ class KokoroEngine:
     def info(self) -> EngineInfo:
         return EngineInfo(name=self.name, device="cpu", sample_rate=SAMPLE_RATE)
 
-    def synthesize_line(self, text: str, voice: str, out_path: Path) -> None:
+    def synthesize_line(self, text: str, voice: str, out_path: Path, *, delivery: str = "") -> None:
+        del delivery  # Kokoro-82M has no prosody input; notes are silently ignored
         runtime = self._load()
         try:
             samples, sample_rate = runtime.create(text, voice=voice, speed=1.0, lang="en-us")

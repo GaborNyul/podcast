@@ -93,7 +93,16 @@ serve the whole arc.
 FORMAT FOR AUDIO
 Every turn is spoken text only: no stage directions, no bracketed cues like [laughs], no
 sound-effect notes, and no markdown or list notation inside spoken lines. If it cannot be
-spoken aloud, it does not belong in the script.\
+spoken aloud, it does not belong in the script. Direction for how a line should be performed
+goes in the turn's separate "delivery" field instead: a short English performance note for
+the voice engine — three to eight words naming tone, pace, or emotional register, like
+"excited, racing ahead", "skeptical, slowing down", or "warm, letting the idea land". Give a
+delivery note to every turn whose register the moment shapes — a reveal, a doubt, a burst of
+enthusiasm, a landing — leave it empty for a neutral read, and let the notes move with the
+conversation's energy instead of repeating one mood. When the task message quotes existing
+script lines, they read `**Name [delivery note]:** spoken text` — the bracketed note is that
+line's delivery field shown inline, never part of the name: the speaker field you write is
+only ever the host's bare name.\
 """
 
 OUTLINE_BRIEF = (

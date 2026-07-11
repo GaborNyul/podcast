@@ -92,6 +92,7 @@ class TestKokoroEngine:
         assert info.device == "cpu"
         assert info.sample_rate == kokoro.SAMPLE_RATE
         assert info.dialogue_native is False
+        assert info.supports_delivery is False
 
     @pytest.mark.usefixtures("fake_runtime_module")
     def test_synthesize_line_writes_wav(self, tmp_path: Path) -> None:
@@ -102,6 +103,14 @@ class TestKokoroEngine:
         assert out.is_file()
         with wave.open(str(out), "rb") as handle:
             assert handle.getnframes() == len("hello there")
+
+    @pytest.mark.usefixtures("fake_runtime_module")
+    def test_delivery_note_is_ignored(self, tmp_path: Path) -> None:
+        _touch_models(tmp_path / "models")
+        engine = kokoro.KokoroEngine(tmp_path / "models")
+        out = tmp_path / "line.wav"
+        engine.synthesize_line("hello", "af_heart", out, delivery="excited, racing ahead")
+        assert out.is_file()
 
     @pytest.mark.usefixtures("fake_runtime_module")
     def test_runtime_loads_once(self, tmp_path: Path) -> None:

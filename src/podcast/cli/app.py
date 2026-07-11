@@ -166,14 +166,20 @@ def _run_synthesize(config: AppConfig, workspace: Workspace, progress: Progress)
     spoken = [turn for turn in transcript.turns if turn.text.strip()]
     task = progress.add_task("Synthesizing lines", total=len(spoken))
     segment_paths: list[Path] = []
+    supports_delivery = engine.info().supports_delivery
     for turn in spoken:
         voice = voices[turn.speaker]
+        delivery = turn.delivery if supports_delivery else ""
 
-        def render(path: Path, text: str = turn.text, voice_id: str = voice) -> None:
-            engine.synthesize_line(text, voice_id, path)
+        def render(
+            path: Path, text: str = turn.text, voice_id: str = voice, note: str = delivery
+        ) -> None:
+            engine.synthesize_line(text, voice_id, path, delivery=note)
 
         segment_paths.append(
-            ensure_segment(workspace.segments_dir, engine.name, voice, turn.text, render, stats)
+            ensure_segment(
+                workspace.segments_dir, engine.name, voice, turn.text, delivery, render, stats
+            )
         )
         progress.advance(task)
 

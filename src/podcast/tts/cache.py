@@ -18,10 +18,14 @@ class CacheStats:
         return self.hits + self.misses
 
 
-def segment_key(engine: str, voice: str, text: str) -> str:
-    """Stable identity of one rendered line; any input change changes the key."""
+def segment_key(engine: str, voice: str, text: str, delivery: str = "") -> str:
+    """Stable identity of one rendered line; any input change changes the key.
+
+    `delivery` only carries a value for engines that act on it, so engines that
+    ignore performance notes keep one cache entry per line regardless of notes.
+    """
     digest = hashlib.sha256()
-    for part in (engine, voice, text):
+    for part in (engine, voice, text, delivery):
         digest.update(part.encode("utf-8"))
         digest.update(b"\x00")
     return digest.hexdigest()
@@ -36,11 +40,12 @@ def ensure_segment(
     engine: str,
     voice: str,
     text: str,
+    delivery: str,
     render: Callable[[Path], None],
     stats: CacheStats,
 ) -> Path:
     """Return the cached WAV for this line, rendering it (atomically) on a miss."""
-    path = segment_path(segments_dir, segment_key(engine, voice, text))
+    path = segment_path(segments_dir, segment_key(engine, voice, text, delivery))
     if path.is_file():
         stats.hits += 1
         return path

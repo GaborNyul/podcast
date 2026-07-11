@@ -1,7 +1,7 @@
 {
   "$defs": {
     "Turn": {
-      "description": "One spoken line.",
+      "description": "One spoken line, optionally with a performance note for the voice engine.",
       "properties": {
         "speaker": {
           "title": "Speaker",
@@ -9,6 +9,12 @@
         },
         "text": {
           "title": "Text",
+          "type": "string"
+        },
+        "delivery": {
+          "default": "",
+          "description": "Short performance note for the voice engine (tone, pace, emotional register \u2014 e.g. 'excited, racing ahead'); never spoken; empty for a neutral read.",
+          "title": "Delivery",
           "type": "string"
         }
       },

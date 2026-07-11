@@ -20,7 +20,7 @@ class SpeechModel(Protocol):
     engine type-checks whether or not the qwen3 extra is installed)."""
 
     def generate_custom_voice(
-        self, *, text: str, language: str, speaker: str
+        self, *, text: str, language: str, speaker: str, instruct: str | None
     ) -> tuple[Sequence[object], int]: ...
 
 
@@ -73,13 +73,15 @@ class Qwen3Engine:
         return self._model
 
     def info(self) -> EngineInfo:
-        return EngineInfo(name=self.name, device=self._device, sample_rate=SAMPLE_RATE)
+        return EngineInfo(
+            name=self.name, device=self._device, sample_rate=SAMPLE_RATE, supports_delivery=True
+        )
 
-    def synthesize_line(self, text: str, voice: str, out_path: Path) -> None:
+    def synthesize_line(self, text: str, voice: str, out_path: Path, *, delivery: str = "") -> None:
         model = self._load()
         try:
             wavs, sample_rate = model.generate_custom_voice(
-                text=text, language=LANGUAGE, speaker=voice
+                text=text, language=LANGUAGE, speaker=voice, instruct=delivery.strip() or None
             )
         except Exception as exc:
             raise TTSError(f"qwen3 failed to synthesize (voice {voice!r}): {exc}") from exc
