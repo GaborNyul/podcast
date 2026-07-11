@@ -1,0 +1,1 @@
+Welcome back to the show. Today we are digging into how retrieval systems actually decide what matters, and why that is much harder than it sounds.
