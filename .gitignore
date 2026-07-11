@@ -28,3 +28,6 @@ episodes/
 
 # Local machine config (layered over defaults; see README)
 podcast.toml
+
+# SoulX clone references are first-class assets (ADR 0012)
+!assets/voices/soulx/*.wav

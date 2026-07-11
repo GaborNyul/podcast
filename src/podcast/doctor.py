@@ -6,6 +6,7 @@ import subprocess
 from dataclasses import dataclass
 
 from podcast.config import AppConfig
+from podcast.errors import PodcastError
 
 
 @dataclass(frozen=True)
@@ -123,16 +124,45 @@ def check_qwen3(config: AppConfig) -> CheckResult:
     return CheckResult(name="qwen3 engine", ok=True, detail=f"{device_name} via {device}")
 
 
+def check_soulx(config: AppConfig) -> CheckResult:
+    try:
+        import s3tokenizer  # noqa: F401  # pyright: ignore[reportMissingImports, reportMissingTypeStubs, reportUnusedImport]
+    except ImportError:
+        return CheckResult(
+            name="soulx engine",
+            ok=False,
+            detail="s3tokenizer not installed",
+            hint="run `uv sync --extra soulx`",
+        )
+    from podcast.tts.soulx import SoulXEngine
+    from podcast.tts.voices import voices_for
+
+    engine = SoulXEngine(config)
+    try:
+        for voice in voices_for("soulx"):
+            engine.cache_token(voice.id)
+    except PodcastError as exc:
+        return CheckResult(
+            name="soulx engine",
+            ok=False,
+            detail=str(exc),
+            hint="point [tts.soulx_refs] at a reference WAV + .txt transcript per voice",
+        )
+    return CheckResult(name="soulx engine", ok=True, detail="clone references and deps present")
+
+
 def check_engine(config: AppConfig) -> CheckResult:
     if config.tts.engine == "kokoro":
         return check_kokoro(config)
     if config.tts.engine == "qwen3":
         return check_qwen3(config)
+    if config.tts.engine == "soulx":
+        return check_soulx(config)
     return CheckResult(
         name="tts engine",
         ok=False,
         detail=f"unknown engine {config.tts.engine!r}",
-        hint="set [tts].engine to kokoro or qwen3",
+        hint="set [tts].engine to kokoro, qwen3, or soulx",
     )
 
 

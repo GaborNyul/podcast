@@ -18,6 +18,9 @@ docs (txt/md/html/pdf/docx) ──▶ podcast generate ──▶ episodes/<slug>
 - **Expressive delivery** — each line can carry a performance note
   (`**Maya [excited, leaning in]:** Get this...`); the qwen3 engine performs it via
   Qwen3-TTS instruction control, engines without that ability ignore it (ADR 0010).
+- **Dialogue-native option** — the `soulx` engine (SoulX-Podcast-1.7B) renders the whole
+  conversation in one pass, so every line reacts to the lines before it; voices are
+  clones of the reference WAVs in `assets/voices/soulx/` (ADR 0012).
 
 ## Install
 
@@ -73,7 +76,7 @@ style = "Speak at a fast, energetic pace."  # baseline instruct for delivery-cap
 tempo = 1.1                                 # pitch-preserving speed-up of this host's lines
 
 [tts]
-engine = "qwen3"                           # qwen3 (GPU) | kokoro (CPU)
+engine = "qwen3"                           # qwen3 (GPU) | kokoro (CPU) | soulx (GPU, dialogue-native)
 qwen3_temperature = 0.8                    # sampling; lower reads robotic (ADR 0011)
 [tts.voices]                               # optional per-speaker voice overrides
                                            # (engine-specific ids — swap when switching engines)

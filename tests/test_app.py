@@ -179,8 +179,37 @@ class _FakeEngine:
         out_path.write_bytes(b"RIFF-fake")
 
 
-def _engine_factory(engine: "_FakeEngine") -> Callable[[AppConfig], "_FakeEngine"]:
-    def factory(_config: AppConfig) -> _FakeEngine:
+class _FakeDialogueEngine:
+    name = "soulx"
+
+    def __init__(self) -> None:
+        self.dialogue_calls = 0
+
+    def info(self) -> EngineInfo:
+        return EngineInfo(
+            name="soulx",
+            device="cpu",
+            sample_rate=24000,
+            dialogue_native=True,
+            supports_delivery=True,
+        )
+
+    def synthesize_line(self, text: str, voice: str, out_path: Path, *, delivery: str = "") -> None:
+        del text, voice, delivery
+        out_path.write_bytes(b"RIFF-fake")
+
+    def synthesize_dialogue(self, lines: object, voices: object, out_paths: list[Path]) -> None:
+        del lines, voices
+        self.dialogue_calls += 1
+        for path in out_paths:
+            path.write_bytes(b"RIFF-fake")
+
+    def cache_token(self, voice: str) -> str:
+        return f"token-{voice}"
+
+
+def _engine_factory(engine: object) -> Callable[[AppConfig], object]:
+    def factory(_config: AppConfig) -> object:
         return engine
 
     return factory
@@ -308,6 +337,40 @@ class TestSynthesizeCommand:
         assert result.exit_code == 0, result.output
         tempos = {tempo for _, tempo in variants}
         assert tempos == {1.0, 1.1}  # Alex neutral, Maya 10% faster
+
+    def test_dialogue_native_engine_renders_whole_conversation(
+        self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        workspace = _generate_episode(isolated_env, monkeypatch)
+        engine = _FakeDialogueEngine()
+        monkeypatch.setattr(app_mod, "create_engine", _engine_factory(engine))
+
+        def fake_voices(*_args: object) -> dict[str, str]:
+            return {"Alex": "alex", "Maya": "maya"}
+
+        monkeypatch.setattr(app_mod, "resolve_voices", fake_voices)
+        calls = _fake_assemble(monkeypatch)
+        result = runner.invoke(app_mod.app, ["synthesize", "demo"])
+        assert result.exit_code == 0, result.output
+        assert engine.dialogue_calls == 1
+        assert "0 cached" in result.output  # stats stay honest on the dialogue path
+        segments = cast("list[Path]", calls[0]["segment_paths"])
+        assert [path.name for path in segments] == sorted(path.name for path in segments)
+        assert len(segments) == 4  # every spoken turn, in script order
+        # unchanged script: whole dialogue is a cache hit
+        result = runner.invoke(app_mod.app, ["synthesize", "demo"])
+        assert result.exit_code == 0
+        assert engine.dialogue_calls == 1
+        assert "4 cached, 0 rendered" in result.output
+        # any line edit re-renders the whole dialogue (context-dependent prosody)
+        script = workspace / "script.md"
+        script.write_text(
+            script.read_text(encoding="utf-8").replace("the sources", "the papers", 1),
+            encoding="utf-8",
+        )
+        result = runner.invoke(app_mod.app, ["synthesize", "demo"])
+        assert result.exit_code == 0
+        assert engine.dialogue_calls == 2
 
     def test_host_style_is_composed_with_delivery_notes(
         self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch

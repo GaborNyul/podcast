@@ -99,6 +99,14 @@ class TTSSettings(BaseModel):
         # kokoro: 153 wpm (2026-07-11, 1316-word episode with content-aware pacing).
         default_factory=lambda: {"qwen3": 0.87, "kokoro": 1.02}
     )
+    # SoulX voice-clone references: voice id -> WAV path (sidecar .txt transcript).
+    # The reference's register is the emotion baseline of the cloned voice.
+    soulx_refs: dict[str, str] = Field(
+        default_factory=lambda: {
+            "alex": "assets/voices/soulx/alex.wav",
+            "maya": "assets/voices/soulx/maya.wav",
+        }
+    )
     # Qwen3-TTS sampling; low temperature is a documented cause of robotic reads.
     qwen3_temperature: float = 0.8
     qwen3_top_p: float = 0.9

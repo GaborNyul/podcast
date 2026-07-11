@@ -4,7 +4,7 @@ from podcast.config import AppConfig
 from podcast.errors import TTSError
 from podcast.tts.base import TTSEngine
 
-ENGINE_NAMES = ("kokoro", "qwen3")
+ENGINE_NAMES = ("kokoro", "qwen3", "soulx")
 
 
 def available_engines() -> list[str]:
@@ -22,4 +22,8 @@ def create_engine(config: AppConfig) -> TTSEngine:
         from podcast.tts.qwen3 import Qwen3Engine
 
         return Qwen3Engine(config)
+    if name == "soulx":
+        from podcast.tts.soulx import SoulXEngine
+
+        return SoulXEngine(config)
     raise TTSError(f"unknown TTS engine {name!r} (available: {', '.join(ENGINE_NAMES)})")

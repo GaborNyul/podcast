@@ -136,8 +136,16 @@ mypy_path = ["scripts"]
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
-# GPU-only deps from the qwen3 extra; not installed in dev/CI environments.
-module = ["torch", "torch.*", "transformers", "transformers.*", "qwen_tts", "qwen_tts.*"]
+# GPU-only deps from the qwen3/soulx extras (plus the SoulX runtime checkout);
+# not installed in dev/CI environments.
+module = [
+    "torch", "torch.*",
+    "transformers", "transformers.*",
+    "qwen_tts", "qwen_tts.*",
+    "soundfile", "torchaudio", "torchaudio.*",
+    "s3tokenizer", "huggingface_hub",
+    "cli.podcast", "soulxpodcast.*",
+]
 ignore_missing_imports = true
 
 [tool.pyright]

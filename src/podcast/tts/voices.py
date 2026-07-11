@@ -34,6 +34,11 @@ ENGINE_VOICES: dict[str, list[Voice]] = {
         Voice("Aiden", "male"),
         Voice("Sohee", "female"),
     ],
+    # SoulX voices are clone references registered in [tts.soulx_refs].
+    "soulx": [
+        Voice("maya", "female"),
+        Voice("alex", "male"),
+    ],
 }
 
 
