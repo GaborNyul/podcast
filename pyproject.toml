@@ -38,6 +38,18 @@ qwen3 = [
     "rocm-sdk-libraries-gfx1151==7.13.0a20260501",
     "triton==3.5.1+rocm7.13.0a20260501",
 ]
+# Dialogue-native SoulX-Podcast engine (ADR 0012): PyPI deps only — the SoulX
+# inference source itself is a pinned git checkout managed at runtime. Requires
+# the qwen3 extra's torch (same TheRock pins apply through the resolver).
+soulx = [
+    "podcast[qwen3]",
+    "s3tokenizer>=0.1.7",
+    "onnxruntime>=1.20",
+    "librosa>=0.10",
+    "diffusers>=0.31",
+    "einops>=0.8",
+    "soundfile>=0.12",
+]
 
 [project.scripts]
 podcast = "podcast.cli.app:main"
