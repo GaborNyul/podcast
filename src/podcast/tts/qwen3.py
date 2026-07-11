@@ -20,7 +20,15 @@ class SpeechModel(Protocol):
     engine type-checks whether or not the qwen3 extra is installed)."""
 
     def generate_custom_voice(
-        self, *, text: str, language: str, speaker: str, instruct: str | None
+        self,
+        *,
+        text: str,
+        language: str,
+        speaker: str,
+        instruct: str | None,
+        temperature: float,
+        top_p: float,
+        repetition_penalty: float,
     ) -> tuple[Sequence[object], int]: ...
 
 
@@ -42,6 +50,9 @@ class Qwen3Engine:
         self._device_override = config.tts.device
         self._model: SpeechModel | None = None
         self._device = self._device_override or "cuda"
+        self._temperature = config.tts.qwen3_temperature
+        self._top_p = config.tts.qwen3_top_p
+        self._repetition_penalty = config.tts.qwen3_repetition_penalty
 
     def _load(self) -> SpeechModel:
         if self._model is None:
@@ -81,7 +92,13 @@ class Qwen3Engine:
         model = self._load()
         try:
             wavs, sample_rate = model.generate_custom_voice(
-                text=text, language=LANGUAGE, speaker=voice, instruct=delivery.strip() or None
+                text=text,
+                language=LANGUAGE,
+                speaker=voice,
+                instruct=delivery.strip() or None,
+                temperature=self._temperature,
+                top_p=self._top_p,
+                repetition_penalty=self._repetition_penalty,
             )
         except Exception as exc:
             raise TTSError(f"qwen3 failed to synthesize (voice {voice!r}): {exc}") from exc

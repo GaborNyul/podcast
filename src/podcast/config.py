@@ -78,6 +78,7 @@ class ScriptSettings(BaseModel):
     words_per_minute: int = 150
     default_minutes: int = 10
     length_tolerance: float = 0.15
+    polish_pass: bool = True  # one rewrite pass for radio texture (ADR 0011)
     hosts: list[HostSpec] = Field(default_factory=_default_hosts, min_length=2)
 
 
@@ -91,6 +92,10 @@ class TTSSettings(BaseModel):
         # qwen3: measured 131 rendered wpm on the Strix Halo box (integration benchmark)
         default_factory=lambda: {"qwen3": 0.87, "kokoro": 0.85}
     )
+    # Qwen3-TTS sampling; low temperature is a documented cause of robotic reads.
+    qwen3_temperature: float = 0.8
+    qwen3_top_p: float = 0.9
+    qwen3_repetition_penalty: float = 1.05
 
 
 class AudioSettings(BaseModel):

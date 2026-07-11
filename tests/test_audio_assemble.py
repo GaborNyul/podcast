@@ -161,3 +161,37 @@ class TestAssembleEpisode:
         fake_ffmpeg.fail_with = "Invalid data found when processing input"
         with pytest.raises(AudioError, match="Invalid data found"):
             _assemble(tmp_path, _segments(tmp_path, 2))
+
+    def test_wrong_gap_scale_count_raises(self, tmp_path: Path, fake_ffmpeg: _FakeFfmpeg) -> None:
+        del fake_ffmpeg
+        with pytest.raises(AudioError, match="gap_scales has 1 entries for 2 gaps"):
+            _assemble(tmp_path, _segments(tmp_path, 3), gap_scales=[1.0])
+
+    def test_gap_scales_stretch_and_shrink_the_pauses(
+        self, tmp_path: Path, fake_ffmpeg: _FakeFfmpeg
+    ) -> None:
+        del fake_ffmpeg
+        _assemble(
+            tmp_path,
+            _segments(tmp_path, 3),
+            pause_min_ms=400,
+            pause_max_ms=400,
+            gap_scales=[0.5, 2.0],
+        )
+        concat = (tmp_path / "work" / "concat.txt").read_text(encoding="utf-8")
+        assert "silence-200ms.wav" in concat
+        assert "silence-800ms.wav" in concat
+
+    def test_gap_scale_never_drops_below_one_step(
+        self, tmp_path: Path, fake_ffmpeg: _FakeFfmpeg
+    ) -> None:
+        del fake_ffmpeg
+        _assemble(
+            tmp_path,
+            _segments(tmp_path, 2),
+            pause_min_ms=200,
+            pause_max_ms=200,
+            gap_scales=[0.01],
+        )
+        concat = (tmp_path / "work" / "concat.txt").read_text(encoding="utf-8")
+        assert "silence-50ms.wav" in concat

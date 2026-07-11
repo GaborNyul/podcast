@@ -25,12 +25,28 @@ class _FakeModel:
         return cls()
 
     def generate_custom_voice(
-        self, *, text: str, language: str, speaker: str, instruct: str | None = None
+        self,
+        *,
+        text: str,
+        language: str,
+        speaker: str,
+        instruct: str | None = None,
+        temperature: float = 0.9,
+        top_p: float = 1.0,
+        repetition_penalty: float = 1.0,
     ) -> tuple[list[list[float]], int]:
         if _FakeModel.fail:
             raise RuntimeError("hip error")
         _FakeModel.generate_calls.append(
-            {"text": text, "language": language, "speaker": speaker, "instruct": instruct}
+            {
+                "text": text,
+                "language": language,
+                "speaker": speaker,
+                "instruct": instruct,
+                "temperature": temperature,
+                "top_p": top_p,
+                "repetition_penalty": repetition_penalty,
+            }
         )
         if _FakeModel.empty:
             return [], 24000
@@ -94,6 +110,9 @@ class TestQwen3Engine:
             "language": "English",
             "speaker": "Ryan",
             "instruct": None,
+            "temperature": 0.8,
+            "top_p": 0.9,
+            "repetition_penalty": 1.05,
         }
         with wave.open(str(out), "rb") as handle:
             assert handle.getnframes() == 3
@@ -127,6 +146,20 @@ class TestQwen3Engine:
             "hello", "Ryan", tmp_path / "x.wav", delivery="excited, racing ahead"
         )
         assert _FakeModel.generate_calls[0]["instruct"] == "excited, racing ahead"
+
+    def test_sampling_overrides_come_from_config(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _install_fakes(monkeypatch, cuda_available=True)
+        config = AppConfig(
+            tts=TTSSettings(qwen3_temperature=0.6, qwen3_top_p=0.8, qwen3_repetition_penalty=1.2)
+        )
+        engine = qwen3.Qwen3Engine(config)
+        engine.synthesize_line("hello", "Ryan", tmp_path / "x.wav")
+        call = _FakeModel.generate_calls[0]
+        assert call["temperature"] == 0.6
+        assert call["top_p"] == 0.8
+        assert call["repetition_penalty"] == 1.2
 
     def test_blank_delivery_note_becomes_no_instruct(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

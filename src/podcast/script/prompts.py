@@ -114,6 +114,16 @@ OUTLINE_BRIEF = (
     "a passing acknowledgment in the notes instead of a silent omission."
 )
 
+POLISH_BRIEF = (
+    "This draft already covers the right content in the right order — do not add new facts, "
+    "numbers, or quotes. Rewrite it as better radio: place the disfluencies and glue of real "
+    "conversation exactly where they help (a 'you know', a false start, a quick 'wait, "
+    "really?'), let the hosts occasionally interrupt or finish each other's sentences, break "
+    "up any two long turns that landed back-to-back, replace stiff hand-offs with reactions "
+    "that do work, and sharpen or add delivery notes wherever the register moves. Keep every "
+    "fact, attribution, analogy, callback, and ritual line intact, keep the same hosts and arc"
+)
+
 OPENING_POSITION = (
     "opening the episode: hook the listener first with a question, paradox, or stake, then "
     "give the warm welcome ritual ('Hey everyone, welcome back.') and a clear framing of "

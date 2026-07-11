@@ -48,9 +48,9 @@ def _silence_file(ffmpeg: str, work_dir: Path, duration_ms: int, sample_rate: in
     return path
 
 
-def _pause_ms(rng: random.Random, minimum_ms: int, maximum_ms: int) -> int:
+def _pause_ms(rng: random.Random, minimum_ms: int, maximum_ms: int, scale: float = 1.0) -> int:
     raw = rng.randint(minimum_ms, maximum_ms) if maximum_ms > minimum_ms else minimum_ms
-    return max(_SILENCE_STEP_MS, round(raw / _SILENCE_STEP_MS) * _SILENCE_STEP_MS)
+    return max(_SILENCE_STEP_MS, round(raw * scale / _SILENCE_STEP_MS) * _SILENCE_STEP_MS)
 
 
 def _concat_entry(path: Path) -> str:
@@ -69,10 +69,20 @@ def assemble_episode(
     pause_max_ms: int,
     bitrate: str,
     seed: int | None = None,
+    gap_scales: Sequence[float] | None = None,
 ) -> None:
-    """Concatenate segments with natural pauses, loudness-normalize, export MP3."""
+    """Concatenate segments with natural pauses, loudness-normalize, export MP3.
+
+    `gap_scales` (one per gap, from `podcast.audio.pacing`) multiplies each
+    sampled pause so the silences follow the conversation's rhythm.
+    """
     if not segment_paths:
         raise AudioError("no audio segments to assemble")
+    if gap_scales is not None and len(gap_scales) != len(segment_paths) - 1:
+        raise AudioError(
+            f"gap_scales has {len(gap_scales)} entries for "
+            f"{len(segment_paths) - 1} gaps between segments"
+        )
     ffmpeg = find_ffmpeg()
     work_dir.mkdir(parents=True, exist_ok=True)
     rng = random.Random(seed)  # noqa: S311 — pause jitter, not cryptography
@@ -80,7 +90,8 @@ def assemble_episode(
     entries: list[Path] = []
     for index, segment in enumerate(segment_paths):
         if index > 0:
-            duration = _pause_ms(rng, pause_min_ms, pause_max_ms)
+            scale = gap_scales[index - 1] if gap_scales is not None else 1.0
+            duration = _pause_ms(rng, pause_min_ms, pause_max_ms, scale)
             entries.append(_silence_file(ffmpeg, work_dir, duration, sample_rate))
         entries.append(segment)
 

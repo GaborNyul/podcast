@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 from pathlib import Path
+from typing import cast
 
 import pytest
 from typer.testing import CliRunner
@@ -95,6 +96,19 @@ class TestGenerateCommand:
         assert (workspace / "sources.json").is_file()
         assert "**" in (workspace / "script.md").read_text(encoding="utf-8")
 
+    def test_polish_pass_can_be_disabled(
+        self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("podcast.ingest.tokens.load_encoder", lambda: None)
+        source = isolated_env / "notes.md"
+        source.write_text("# Ants\n\nAnts are strong.", encoding="utf-8")
+        (isolated_env / "podcast.toml").write_text(
+            '[llm]\nprovider = "fake"\n[script]\npolish_pass = false\n', encoding="utf-8"
+        )
+        result = runner.invoke(app_mod.app, ["generate", str(source), "-d", "1"])
+        assert result.exit_code == 0, result.output
+        assert "Polishing dialogue" not in result.output
+
     def test_name_override_sets_slug(
         self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -172,11 +186,11 @@ def _engine_factory(engine: "_FakeEngine") -> Callable[[AppConfig], "_FakeEngine
     return factory
 
 
-def _fake_assemble(monkeypatch: pytest.MonkeyPatch) -> list[list[Path]]:
-    calls: list[list[Path]] = []
+def _fake_assemble(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, object]]:
+    calls: list[dict[str, object]] = []
 
-    def assemble(segment_paths: list[Path], out_path: Path, **_kwargs: object) -> None:
-        calls.append(list(segment_paths))
+    def assemble(segment_paths: list[Path], out_path: Path, **kwargs: object) -> None:
+        calls.append({"segment_paths": list(segment_paths), **kwargs})
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_bytes(b"ID3-fake-mp3")
 
@@ -242,6 +256,19 @@ class TestSynthesizeCommand:
         result = runner.invoke(app_mod.app, ["synthesize", "demo"])
         assert result.exit_code == 0
         assert engine.renders == baseline + 1
+
+    def test_assembly_receives_one_gap_scale_per_gap(
+        self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _generate_episode(isolated_env, monkeypatch)
+        engine = _FakeEngine()
+        monkeypatch.setattr(app_mod, "create_engine", _engine_factory(engine))
+        calls = _fake_assemble(monkeypatch)
+        result = runner.invoke(app_mod.app, ["synthesize", "demo"])
+        assert result.exit_code == 0, result.output
+        segments = cast("list[Path]", calls[0]["segment_paths"])
+        scales = cast("list[float]", calls[0]["gap_scales"])
+        assert len(scales) == len(segments) - 1
 
     def test_delivery_notes_reach_a_supporting_engine(
         self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch

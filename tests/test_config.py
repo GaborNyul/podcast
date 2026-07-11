@@ -190,6 +190,14 @@ class TestAppConfig:
         config = AppConfig()
         assert set(config.tts.calibration) == {"qwen3", "kokoro"}
 
+    @pytest.mark.usefixtures("isolated_env")
+    def test_expressiveness_defaults(self) -> None:
+        config = AppConfig()
+        assert config.script.polish_pass is True
+        assert config.tts.qwen3_temperature == 0.8
+        assert config.tts.qwen3_top_p == 0.9
+        assert config.tts.qwen3_repetition_penalty == 1.05
+
     def test_host_spec_rejects_unknown_gender(self) -> None:
         with pytest.raises(ValueError, match="gender"):
             HostSpec(name="X", gender="robot", persona="beep")  # pyright: ignore[reportArgumentType]

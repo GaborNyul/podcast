@@ -72,8 +72,10 @@ persona = "the guide (lead explainer): explains with vivid analogies and concret
 
 [tts]
 engine = "qwen3"                           # qwen3 (GPU) | kokoro (CPU)
+qwen3_temperature = 0.8                    # sampling; lower reads robotic (ADR 0011)
 [tts.voices]                               # optional per-speaker voice overrides
-Alex = "Ethan"
+                                           # (engine-specific ids — swap when switching engines)
+Alex = "Ryan"
 
 [tts.calibration]                          # measured rendered-wpm / 150 per engine
 qwen3 = 0.85

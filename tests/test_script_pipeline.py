@@ -203,6 +203,41 @@ class TestWriteDialogue:
         assert prompts.CONTINUING_POSITION + prompts.FINAL_POSITION in provider.prompts[2]
 
 
+class TestPolishDialogue:
+    def _transcript(self) -> Transcript:
+        return Transcript(
+            title="T",
+            hosts=["Alex", "Maya"],
+            turns=[
+                Turn(speaker="Alex", text="one two three four five", delivery="wry"),
+                Turn(speaker="Maya", text="six seven eight nine ten"),
+            ],
+        )
+
+    def test_polish_prompt_carries_brief_script_and_word_target(self) -> None:
+        polished = [{"speaker": "Maya", "text": "better radio line", "delivery": "amused"}]
+        provider = _ScriptedProvider([json.dumps({"turns": polished})])
+        result = pipeline.polish_dialogue(provider, AppConfig(), self._transcript())
+        assert provider.systems[0] == prompts.SYSTEM_PROMPT
+        assert prompts.POLISH_BRIEF in provider.prompts[0]
+        assert "approximately 10 words" in provider.prompts[0]
+        assert "**Alex [wry]:** one two three four five" in provider.prompts[0]
+        assert result.turns[0].delivery == "amused"
+
+    def test_disabled_polish_pass_skips_the_llm(self) -> None:
+        config = AppConfig()
+        config.script.polish_pass = False
+        provider = _ScriptedProvider([])
+        transcript = self._transcript()
+        assert pipeline.polish_dialogue(provider, config, transcript) is transcript
+        assert provider.schemas == []
+
+    def test_empty_polish_reply_keeps_the_original(self) -> None:
+        provider = _ScriptedProvider([json.dumps({"turns": []})])
+        transcript = self._transcript()
+        assert pipeline.polish_dialogue(provider, AppConfig(), transcript) is transcript
+
+
 class TestEnsureLength:
     def _transcript(self, words: int) -> Transcript:
         return Transcript(

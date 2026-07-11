@@ -8,6 +8,7 @@ from rich.progress import Progress
 from rich.table import Table
 
 from podcast import __version__, doctor
+from podcast.audio import pacing
 from podcast.audio.assemble import assemble_episode
 from podcast.cli import ui
 from podcast.config import AppConfig, load_config
@@ -102,6 +103,11 @@ def _run_generate(
 
     transcript = pipeline.write_dialogue(provider, config, grounding, outline, advance)
 
+    if config.script.polish_pass:
+        polish_task = progress.add_task("Polishing dialogue", total=1)
+        transcript = pipeline.polish_dialogue(provider, config, transcript)
+        progress.update(polish_task, completed=1)
+
     repair_task = progress.add_task("Checking length", total=1)
     transcript = pipeline.ensure_length(provider, config, transcript, budget_words)
     progress.update(repair_task, completed=1)
@@ -193,6 +199,7 @@ def _run_synthesize(config: AppConfig, workspace: Workspace, progress: Progress)
         pause_max_ms=config.audio.pause_max_ms,
         bitrate=config.audio.mp3_bitrate,
         seed=config.audio.seed,
+        gap_scales=pacing.gap_scales(spoken),
     )
     progress.update(assemble_task, completed=1)
     return stats

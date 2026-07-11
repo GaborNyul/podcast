@@ -16,6 +16,7 @@ from podcast.script.prompts import (
     FINAL_POSITION,
     OPENING_POSITION,
     OUTLINE_BRIEF,
+    POLISH_BRIEF,
     SYSTEM_PROMPT,
 )
 
@@ -160,6 +161,27 @@ def write_dialogue(
         if on_segment is not None:
             on_segment(index)
     return Transcript(title=outline.title, hosts=host_names, turns=turns)
+
+
+def polish_dialogue(
+    provider: ChatProvider, config: AppConfig, transcript: Transcript
+) -> Transcript:
+    """One whole-script rewrite for radio texture (disfluencies, interruptions,
+    sharper delivery notes) — NotebookLM's dedicated disfluency pass (ADR 0011)."""
+    if not config.script.polish_pass:
+        return transcript
+    script_text = "\n".join(turn_to_line(turn) for turn in transcript.turns)
+    messages = [
+        system(SYSTEM_PROMPT),
+        user(
+            f"{POLISH_BRIEF}, and keep the total at approximately "
+            f"{transcript.word_count()} words:\n\n{script_text}"
+        ),
+    ]
+    polished_turns = _dialogue_request(provider, config, messages, transcript.hosts)
+    if not polished_turns:
+        return transcript
+    return transcript.model_copy(update={"turns": polished_turns})
 
 
 def ensure_length(
