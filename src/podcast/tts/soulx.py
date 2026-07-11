@@ -73,9 +73,9 @@ def _git(*args: str) -> None:
 def shim_torchaudio() -> None:
     """torchaudio 2.9 nightlies delegate load/save to torchcodec, which is not
     ABI-safe against TheRock wheels; SoulX only needs plain WAV I/O."""
-    import soundfile  # type: ignore[import-untyped]  # pyright: ignore[reportMissingImports, reportMissingTypeStubs]
+    import soundfile  # pyright: ignore[reportMissingImports, reportMissingTypeStubs]
     import torch  # pyright: ignore[reportMissingImports]
-    import torchaudio  # type: ignore[import-untyped]  # pyright: ignore[reportMissingImports, reportMissingTypeStubs]
+    import torchaudio  # pyright: ignore[reportMissingImports, reportMissingTypeStubs]
 
     def _load(path: object, *_args: object, **_kwargs: object) -> tuple[Any, int]:
         data, sr = soundfile.read(str(path), dtype="float32", always_2d=True)  # pyright: ignore[reportUnknownMemberType, reportUnknownVariableType]
@@ -137,10 +137,10 @@ class SoulXEngine:
             if str(repo) not in sys.path:
                 sys.path.insert(0, str(repo))
             try:
-                from cli.podcast import (  # type: ignore[import-not-found]  # pyright: ignore[reportMissingImports]
+                from cli.podcast import (  # pyright: ignore[reportMissingImports]
                     initiate_model,  # pyright: ignore[reportUnknownVariableType]
                 )
-                from soulxpodcast.utils.infer_utils import (  # type: ignore[import-not-found]  # pyright: ignore[reportMissingImports]
+                from soulxpodcast.utils.infer_utils import (  # pyright: ignore[reportMissingImports]
                     process_single_input,  # pyright: ignore[reportUnknownVariableType]
                 )
             except ImportError as exc:

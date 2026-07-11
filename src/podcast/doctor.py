@@ -126,7 +126,7 @@ def check_qwen3(config: AppConfig) -> CheckResult:
 
 def check_soulx(config: AppConfig) -> CheckResult:
     try:
-        import s3tokenizer  # type: ignore[import-untyped]  # noqa: F401  # pyright: ignore[reportMissingImports, reportMissingTypeStubs, reportUnusedImport]
+        import s3tokenizer  # noqa: F401  # pyright: ignore[reportMissingImports, reportMissingTypeStubs, reportUnusedImport]
     except ImportError:
         return CheckResult(
             name="soulx engine",
