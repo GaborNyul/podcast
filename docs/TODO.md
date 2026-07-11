@@ -2,7 +2,21 @@
 
 Planned follow-up work; items move into ADRs/specs when they start.
 
-## 1. Hennig-style empirical refinement of the new formats
+## 1. Per-format default minutes configurable from podcast.toml
+
+Each format's default length (`FormatSpec.default_minutes`: brief 2, debate 7, critique 9;
+deep-dive defers to `script.default_minutes`) is currently hard-coded in
+`script/formats.py`. Make it overridable per format from configuration — podcast.toml and
+every other layer (user config, `PODCAST_*` env vars):
+
+1. Add e.g. `[script.format_minutes]` (`brief = 3`, `debate = 10`, ...) to
+   `ScriptSettings`, validated against known format keys.
+2. Resolution order in `_episode_minutes` becomes: explicit `-d` > config override for the
+   selected format > `FormatSpec.default_minutes` > `script.default_minutes`.
+3. `podcast formats` table shows the resolved (overridden) length, marking overrides.
+4. Tests: layering (project over user over defaults), env-var form, unknown-key rejection.
+
+## 2. Hennig-style empirical refinement of the new formats
 
 The brief/debate/critique prompts (ADR 0013) were selected by judged bakeoff on a single
 source (RAG.md), judged on *scripts*. NotebookLM's formats were reverse-engineered the other
@@ -23,7 +37,7 @@ way around — from what listeners actually hear. Close that loop:
    `episodes/format-bakeoff-*/`), and pin the newly validated texts in
    `tests/test_formats.py`.
 
-## 2. Clone the original NotebookLM voices for qwen3 and SoulX
+## 3. Clone the original NotebookLM voices for qwen3 and SoulX
 
 Replace the qwen3-minted references with voices cloned from real NotebookLM audio:
 
