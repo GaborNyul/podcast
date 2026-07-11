@@ -145,7 +145,7 @@ class SoulXEngine:
                 )
             except ImportError as exc:
                 raise TTSError(f"SoulX source at {repo} failed to import: {exc}") from exc
-            weights = str(snapshot_download(MODEL_ID, revision=MODEL_REVISION))
+            weights = str(snapshot_download(MODEL_ID, revision=MODEL_REVISION))  # pyright: ignore[reportUnknownArgumentType]
             model, dataset = initiate_model(986, weights, "hf", False)  # pyright: ignore[reportUnknownVariableType]
             self._model = cast("DialogueModel", model)
             self._dataset = dataset
