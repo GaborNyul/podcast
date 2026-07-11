@@ -95,9 +95,9 @@ def _outline_schema(spec: FormatSpec, host_names: list[str]) -> dict[str, object
             "required": list(host_names),
             "additionalProperties": False,
         }
+        # host_angles has a model default, so pydantic never lists it itself.
         required = cast("list[str]", schema.setdefault("required", []))
-        if "host_angles" not in required:
-            required.append("host_angles")
+        required.append("host_angles")
     else:
         properties.pop("host_angles", None)
     return schema

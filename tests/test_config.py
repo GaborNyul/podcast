@@ -226,6 +226,10 @@ class TestAppConfig:
         with pytest.raises(ValueError, match="deep-dive, brief, debate, critique"):
             config_mod.ScriptSettings(format="sirens")
 
+    @pytest.mark.parametrize("key", ["deep-dive", "brief", "debate", "critique"])
+    def test_known_formats_are_accepted(self, key: str) -> None:
+        assert config_mod.ScriptSettings(format=key).format == key
+
     def test_solo_host_must_be_a_configured_host(self) -> None:
         with pytest.raises(ValueError, match="not a configured host"):
             config_mod.ScriptSettings(solo_host="Zed")

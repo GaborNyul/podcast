@@ -430,6 +430,30 @@ class TestDebateFormat:
             assert "Assigned stance (argue this side all episode): argues for" in prompt
             assert "Assigned stance (argue this side all episode): argues against" in prompt
 
+    def test_unknown_stance_keys_are_dropped(self) -> None:
+        reply = json.dumps(
+            {
+                "title": "T",
+                "segments": [{"heading": "a", "target_words": 50}],
+                "host_angles": {"Narrator": "meta", "Alex": "for", "Maya": "against"},
+            }
+        )
+        provider = _ScriptedProvider([reply])
+        outline = pipeline.build_outline(provider, _config_for("debate"), SOURCES, 50)
+        assert outline.host_angles == {"Alex": "for", "Maya": "against"}
+
+    def test_blank_stance_counts_as_missing(self) -> None:
+        reply = json.dumps(
+            {
+                "title": "T",
+                "segments": [{"heading": "a", "target_words": 50}],
+                "host_angles": {"Alex": "   ", "Maya": "against"},
+            }
+        )
+        provider = _ScriptedProvider([reply])
+        with pytest.raises(ScriptError, match="did not assign a debate stance to Alex"):
+            pipeline.build_outline(provider, _config_for("debate"), SOURCES, 50)
+
     def test_case_mangled_stance_keys_are_normalized(self) -> None:
         reply = json.dumps(
             {
