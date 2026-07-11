@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Tooling caches
+.venv/
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+.hypothesis/
+.coverage
+coverage.xml
+htmlcov/
+mutants/
+.mutmut-cache
+
+# Secrets
+.env
+.env.*
+
+# Project artifacts
+episodes/
+*.wav
+*.mp3
+
+# Local machine config (layered over defaults; see README)
+podcast.toml

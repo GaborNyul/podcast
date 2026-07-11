@@ -1,0 +1,58 @@
+{
+  "$defs": {
+    "Turn": {
+      "description": "One spoken line, optionally with a performance note for the voice engine.",
+      "properties": {
+        "speaker": {
+          "title": "Speaker",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "delivery": {
+          "default": "",
+          "description": "Short performance note for the voice engine (tone, pace, emotional register \u2014 e.g. 'excited, racing ahead'); never spoken; empty for a neutral read.",
+          "title": "Delivery",
+          "type": "string"
+        }
+      },
+      "required": [
+        "speaker",
+        "text"
+      ],
+      "title": "Turn",
+      "type": "object"
+    }
+  },
+  "description": "A whole episode script; the unit that round-trips through script.md.",
+  "properties": {
+    "title": {
+      "title": "Title",
+      "type": "string"
+    },
+    "hosts": {
+      "items": {
+        "type": "string"
+      },
+      "minItems": 2,
+      "title": "Hosts",
+      "type": "array"
+    },
+    "turns": {
+      "items": {
+        "$ref": "#/$defs/Turn"
+      },
+      "title": "Turns",
+      "type": "array"
+    }
+  },
+  "required": [
+    "title",
+    "hosts",
+    "turns"
+  ],
+  "title": "Transcript",
+  "type": "object"
+}

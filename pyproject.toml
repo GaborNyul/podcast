@@ -1,0 +1,192 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "podcast"
+version = "0.1.0"
+description = "Local-first NotebookLM-style podcast generator: documents in, two-host audio episode out."
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+license = { text = "MIT" }
+authors = [{ name = "Gabor Nyul", email = "gabor.nyul.hun@gmail.com" }]
+dependencies = [
+    "typer>=0.16",
+    "rich>=13.9",
+    "pydantic>=2.10",
+    "pydantic-settings>=2.8",
+    "httpx>=0.28",
+    "anthropic>=0.45",
+    "tiktoken>=0.8",
+    "markitdown[pdf,docx]>=0.1.1",
+    "trafilatura>=2.0",
+    "kokoro-onnx>=0.4.9",
+    "python-dotenv>=1.2.2",
+]
+
+[project.optional-dependencies]
+# GPU engine for AMD Strix Halo (gfx1151): torch comes from AMD's TheRock nightly
+# index, pinned to a known-good build (ADR 0004). Linux-only.
+qwen3 = [
+    "qwen-tts>=0.1",  # official Qwen3-TTS inference package (Qwen3TTSModel)
+    "torch==2.9.1+rocm7.13.0a20260501",
+    "torchaudio==2.9.0+rocm7.13.0a20260501",
+    # The ROCm runtime family must be pinned directly: uv applies [tool.uv.sources]
+    # only to first-party requirements, and these live solely on the TheRock index.
+    "rocm==7.13.0a20260501",
+    "rocm-sdk-core==7.13.0a20260501",
+    "rocm-sdk-libraries-gfx1151==7.13.0a20260501",
+    "triton==3.5.1+rocm7.13.0a20260501",
+]
+# Dialogue-native SoulX-Podcast engine (ADR 0012): PyPI deps only — the SoulX
+# inference source itself is a pinned git checkout managed at runtime. Requires
+# the qwen3 extra's torch (same TheRock pins apply through the resolver).
+soulx = [
+    "podcast[qwen3]",
+    "s3tokenizer>=0.1.7",
+    "onnxruntime>=1.20",
+    "librosa>=0.10",
+    "diffusers>=0.31",
+    "einops>=0.8",
+    "soundfile>=0.12",
+]
+
+[project.scripts]
+podcast = "podcast.cli.app:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-cov>=6.0",
+    "pytest-timeout>=2.3",
+    "hypothesis>=6.120",
+    "respx>=0.22",
+    "jsonschema>=4.23",
+    "mypy>=1.14",
+    "pyright>=1.1.390",
+    "ruff>=0.9",
+    "pre-commit>=4.0",
+    "mutmut>=3.2",
+    "pip-audit>=2.7",
+    "pip-licenses>=5.0",
+    "detect-secrets>=1.5",
+    "bandit[toml]>=1.8",
+    "types-jsonschema>=4.26.0.20260518",
+]
+
+# A dependency cooldown (uv `exclude-newer`) is deliberately NOT set: uv hard-fails
+# any package whose index omits upload timestamps, and AMD's TheRock nightly index
+# (required for gfx1151 torch) serves none. Supply-chain risk is mitigated instead
+# by exact-pinning every TheRock package and hash-pinning uv.lock (`uv lock --check`
+# in CI).
+[tool.uv]  # nosemgrep: package_managers.uv.uv-missing-dependency-cooldown.uv-missing-dependency-cooldown
+environments = ["sys_platform == 'linux'"]
+
+# TheRock ships the ROCm runtime only as pre-releases (7.13.0aYYYYMMDD); stable
+# releases are still preferred for every package that has them.
+prerelease = "allow"
+
+
+[[tool.uv.index]]
+name = "therock-gfx1151"
+url = "https://rocm.nightlies.amd.com/v2/gfx1151/"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "therock-gfx1151" }
+torchaudio = { index = "therock-gfx1151" }
+rocm = { index = "therock-gfx1151" }
+rocm-sdk = { index = "therock-gfx1151" }
+rocm-sdk-core = { index = "therock-gfx1151" }
+rocm-sdk-devel = { index = "therock-gfx1151" }
+rocm-sdk-libraries-gfx1151 = { index = "therock-gfx1151" }
+triton = { index = "therock-gfx1151" }
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+src = ["src", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "SIM",  # flake8-simplify
+    "C4",   # flake8-comprehensions
+    "DTZ",  # flake8-datetimez
+    "PIE",  # flake8-pie
+    "PT",   # flake8-pytest-style
+    "RET",  # flake8-return
+    "ARG",  # flake8-unused-arguments
+    "S",    # flake8-bandit (security)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S603", "S607"]  # allow assert, subprocess in tests
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+files = ["src", "tests", "scripts"]
+mypy_path = ["scripts"]
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+# GPU-only deps from the qwen3 extra; not installed in dev/CI environments.
+module = ["torch", "torch.*", "transformers", "transformers.*", "qwen_tts", "qwen_tts.*"]
+ignore_missing_imports = true
+
+[tool.pyright]
+pythonVersion = "3.13"
+typeCheckingMode = "strict"
+include = ["src", "tests", "scripts"]
+extraPaths = ["scripts"]
+venvPath = "."
+venv = ".venv"
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+addopts = "--strict-markers -m 'not integration and not performance'"
+markers = [
+    "integration: needs real models/hardware/network; excluded from default runs",
+    "performance: timing-asserted tests; nightly only",
+    "contracts: JSON schema contract validation for workspace artifacts",
+]
+
+[tool.coverage.run]
+source = ["podcast", "scripts"]
+branch = true
+
+[tool.coverage.paths]
+source = ["src/podcast", "*/site-packages/podcast"]
+
+[tool.coverage.report]
+fail_under = 100
+show_missing = true
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "^\\s*\\.\\.\\.$",
+    "if __name__ == \"__main__\":",
+]
+
+[tool.bandit]
+targets = ["src", "scripts"]
+exclude_dirs = ["tests", ".venv"]
+
+[tool.mutmut]
+paths_to_mutate = "src/podcast/"
+tests_dir = "tests/"
+
+[tool.adversarial-review]
+max_iterations = 5          # hard-cap backstop
+fix_threshold = "high"      # fix Critical + High; Medium/Low are residual
+report_path = "reports/adversarial_review.json"
+
+[tool.pip-licenses]
+# GPL-3.0 dependencies are blocked per standards v3 (security scanning, layer 3).
+fail-on = "GPL-3.0"

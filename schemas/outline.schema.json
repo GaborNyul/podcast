@@ -1,0 +1,50 @@
+{
+  "$defs": {
+    "OutlineSegment": {
+      "description": "One planned episode segment with its word budget.",
+      "properties": {
+        "heading": {
+          "title": "Heading",
+          "type": "string"
+        },
+        "target_words": {
+          "minimum": 1,
+          "title": "Target Words",
+          "type": "integer"
+        },
+        "notes": {
+          "default": "",
+          "title": "Notes",
+          "type": "string"
+        }
+      },
+      "required": [
+        "heading",
+        "target_words"
+      ],
+      "title": "OutlineSegment",
+      "type": "object"
+    }
+  },
+  "description": "The word-budgeted episode plan.",
+  "properties": {
+    "title": {
+      "title": "Title",
+      "type": "string"
+    },
+    "segments": {
+      "items": {
+        "$ref": "#/$defs/OutlineSegment"
+      },
+      "minItems": 1,
+      "title": "Segments",
+      "type": "array"
+    }
+  },
+  "required": [
+    "title",
+    "segments"
+  ],
+  "title": "Outline",
+  "type": "object"
+}
