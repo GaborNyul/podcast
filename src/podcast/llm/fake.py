@@ -2,10 +2,13 @@
 
 Contract with the script pipeline (kept in sync with `podcast.script`): prompts
 state word targets as "approximately N words"; the outline schema exposes a
-"segments" property; the dialogue schema exposes a "turns" property whose
-`speaker` field is an enum of host names and whose `delivery` field carries the
-per-turn performance note (this provider emits a deterministic mix of annotated
-and neutral turns so the delivery path is exercised offline).
+"segments" property (plus, for the debate format, a "host_angles" object whose
+per-host property names carry the host names to assign stances to); the critique
+review schema exposes a "findings" property; the dialogue schema exposes a
+"turns" property whose `speaker` field is an enum of host names and whose
+`delivery` field carries the per-turn performance note (this provider emits a
+deterministic mix of annotated and neutral turns so the delivery path is
+exercised offline).
 """
 
 import json
@@ -131,12 +134,16 @@ class FakeProvider:
         properties = _as_mapping(json_schema.get("properties"))
         keys: set[str] = set(properties) if properties is not None else set()
         if "segments" in keys:
-            return self._outline(messages)
+            return self._outline(messages, properties)
+        if "findings" in keys:
+            return self._review()
         if "turns" in keys:
             return self._dialogue(messages, json_schema)
         return "{}"
 
-    def _outline(self, messages: Sequence[ChatMessage]) -> str:
+    def _outline(
+        self, messages: Sequence[ChatMessage], properties: Mapping[str, object] | None
+    ) -> str:
         total = _requested_words(messages)
         share = total // len(_HEADINGS)
         remainder = total - share * len(_HEADINGS)
@@ -148,7 +155,36 @@ class FakeProvider:
             }
             for index, heading in enumerate(_HEADINGS)
         ]
-        return json.dumps({"title": "A Guided Tour of the Sources", "segments": segments})
+        payload: dict[str, object] = {"title": "A Guided Tour of the Sources", "segments": segments}
+        angles = _as_mapping(properties.get("host_angles")) if properties is not None else None
+        if angles is not None:
+            host_names = _as_mapping(angles.get("properties")) or {}
+            stances = (
+                "argues the sources support this reading",
+                "argues the sources leave this open",
+            )
+            payload["host_angles"] = {
+                name: stances[index % len(stances)] for index, name in enumerate(host_names)
+            }
+        return json.dumps(payload)
+
+    def _review(self) -> str:
+        findings = [
+            {
+                "summary": f"Claim {index} lacks supporting evidence.",
+                "anchor": f"The sources state claim {index} without a comparison.",
+                "detail": "An unsupported claim weakens the argument.",
+                "suggestion": f"Add the missing comparison for claim {index}.",
+            }
+            for index in range(1, 4)
+        ]
+        return json.dumps(
+            {
+                "strengths": ["The structure follows the sources closely."],
+                "findings": findings,
+                "questions": ["What would falsify the central claim?"],
+            }
+        )
 
     def _dialogue(self, messages: Sequence[ChatMessage], json_schema: Mapping[str, object]) -> str:
         target = _requested_words(messages)

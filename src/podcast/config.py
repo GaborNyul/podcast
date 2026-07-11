@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Literal, cast
 
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field, ValidationError, field_validator
+from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -79,13 +79,39 @@ class LLMSettings(BaseModel):
 
 
 class ScriptSettings(BaseModel):
-    """Length control and host personas."""
+    """Length control, host personas, and the audio-overview format."""
 
     words_per_minute: int = 150
     default_minutes: int = 10
     length_tolerance: float = 0.15
     polish_pass: bool = True  # one rewrite pass for radio texture (ADR 0011)
+    # Audio-overview format (ADR 0013): deep-dive, brief, debate, or critique.
+    format: str = "deep-dive"
+    # Which configured host narrates solo formats (brief); None → the first
+    # host. "Maya" (the guide) is the recommended setting.
+    solo_host: str | None = None
     hosts: list[HostSpec] = Field(default_factory=_default_hosts, min_length=2)
+
+    @field_validator("format")
+    @classmethod
+    def _format_is_known(cls, value: str) -> str:
+        # Local import: config is a base layer; podcast.script modules import it.
+        from podcast.script.formats import FORMATS
+
+        if value not in FORMATS:
+            raise ValueError(f"unknown format {value!r} (formats: {', '.join(FORMATS)})")
+        return value
+
+    @model_validator(mode="after")
+    def _solo_host_is_configured(self) -> "ScriptSettings":
+        if self.solo_host is not None:
+            names = {host.name for host in self.hosts}
+            if self.solo_host not in names:
+                raise ValueError(
+                    f"solo_host {self.solo_host!r} is not a configured host "
+                    f"(hosts: {', '.join(sorted(names))})"
+                )
+        return self
 
 
 class TTSSettings(BaseModel):

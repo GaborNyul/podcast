@@ -19,9 +19,16 @@ class TestTranscript:
         transcript = Transcript(title="T", hosts=["A", "B"], turns=[])
         assert transcript.word_count() == 0
 
-    def test_requires_two_hosts(self) -> None:
+    def test_requires_at_least_one_host(self) -> None:
         with pytest.raises(ValidationError):
-            Transcript(title="T", hosts=["Solo"], turns=[])
+            Transcript(title="T", hosts=[], turns=[])
+
+    def test_solo_transcript_is_valid_and_defaults_deep_dive(self) -> None:
+        transcript = Transcript(title="T", hosts=["Solo"], turns=[])
+        assert transcript.format == "deep-dive"
+
+    def test_format_is_recorded(self) -> None:
+        assert Transcript(title="T", hosts=["Solo"], turns=[], format="brief").format == "brief"
 
     def test_extra_llm_keys_are_ignored(self) -> None:
         transcript = Transcript.model_validate(

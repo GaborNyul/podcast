@@ -5,11 +5,11 @@ from collections.abc import Mapping, Sequence
 
 import pytest
 
-from podcast.config import AppConfig
+from podcast.config import AppConfig, HostSpec
 from podcast.errors import ScriptError
 from podcast.llm.base import ChatMessage
 from podcast.llm.fake import FakeProvider
-from podcast.script import pipeline, prompts
+from podcast.script import formats, pipeline, prompts
 from podcast.script.models import Outline, OutlineSegment, Transcript, Turn
 
 SOURCES = "## Source 1: Ants\n\nAnts are fascinating."
@@ -287,3 +287,265 @@ class TestEnsureLength:
         provider = _ScriptedProvider([json.dumps({"turns": repaired_turns})])
         result = pipeline.ensure_length(provider, AppConfig(), transcript, 100)
         assert result is transcript
+
+
+def _config_for(format_key: str) -> AppConfig:
+    config = AppConfig()
+    config.script.format = format_key
+    return config
+
+
+class TestEpisodeHosts:
+    def test_two_speaker_formats_use_all_hosts(self) -> None:
+        config = _config_for("debate")
+        spec = pipeline.episode_format(config)
+        assert [host.name for host in pipeline.episode_hosts(config, spec)] == ["Alex", "Maya"]
+
+    def test_solo_defaults_to_the_first_host(self) -> None:
+        config = _config_for("brief")
+        spec = pipeline.episode_format(config)
+        assert [host.name for host in pipeline.episode_hosts(config, spec)] == ["Alex"]
+
+    def test_solo_host_setting_is_honored(self) -> None:
+        config = _config_for("brief")
+        config.script.solo_host = "Maya"
+        spec = pipeline.episode_format(config)
+        assert [host.name for host in pipeline.episode_hosts(config, spec)] == ["Maya"]
+
+    def test_two_person_formats_trim_extra_hosts(self) -> None:
+        third = HostSpec(name="Sam", gender="male", persona="the third voice")
+        for key in ("debate", "critique"):
+            config = _config_for(key)
+            config.script.hosts = [*config.script.hosts, third]
+            spec = pipeline.episode_format(config)
+            names = [host.name for host in pipeline.episode_hosts(config, spec)]
+            assert names == ["Alex", "Maya"]
+
+    def test_deep_dive_keeps_every_configured_host(self) -> None:
+        config = _config_for("deep-dive")
+        config.script.hosts = [
+            *config.script.hosts,
+            HostSpec(name="Sam", gender="male", persona="the third voice"),
+        ]
+        spec = pipeline.episode_format(config)
+        assert [host.name for host in pipeline.episode_hosts(config, spec)] == [
+            "Alex",
+            "Maya",
+            "Sam",
+        ]
+
+
+class TestBriefFormat:
+    def test_outline_prompt_carries_brief_shape(self) -> None:
+        reply = json.dumps({"title": "T", "segments": [{"heading": "a", "target_words": 50}]})
+        provider = _ScriptedProvider([reply])
+        pipeline.build_outline(provider, _config_for("brief"), SOURCES, 50)
+        assert provider.systems[0] == formats.FORMATS["brief"].system_prompt
+        assert "Break the episode into 1-2 segments" in provider.prompts[0]
+        assert formats.FORMATS["brief"].outline_brief in provider.prompts[0]
+
+    def test_dialogue_is_solo_start_to_finish(self) -> None:
+        config = _config_for("brief")
+        outline = pipeline.build_outline(FakeProvider(), config, SOURCES, 120)
+        transcript = pipeline.write_dialogue(FakeProvider(), config, SOURCES, outline)
+        assert transcript.hosts == ["Alex"]
+        assert transcript.format == "brief"
+        assert {turn.speaker for turn in transcript.turns} == {"Alex"}
+
+    def test_solo_schema_and_request_phrasing(self) -> None:
+        config = _config_for("brief")
+        outline = Outline(title="T", segments=[OutlineSegment(heading="only", target_words=60)])
+        reply = json.dumps({"turns": [{"speaker": "Alex", "text": "hello"}]})
+        provider = _ScriptedProvider([reply])
+        pipeline.write_dialogue(provider, config, SOURCES, outline)
+        assert '"enum": ["Alex"]' in json.dumps(provider.schemas[0])
+        assert "Alex speaking alone, directly to the listener" in provider.prompts[0]
+
+    def test_undershoot_is_accepted_without_an_llm_call(self) -> None:
+        transcript = Transcript(
+            title="T", hosts=["Alex"], turns=[Turn(speaker="Alex", text="w " * 100)]
+        )
+        provider = _ScriptedProvider([])
+        result = pipeline.ensure_length(provider, _config_for("brief"), transcript, 300)
+        assert result is transcript
+        assert provider.schemas == []
+
+    def test_overshoot_is_still_compressed(self) -> None:
+        transcript = Transcript(
+            title="T", hosts=["Alex"], turns=[Turn(speaker="Alex", text="w " * 500)]
+        )
+        repaired = [{"speaker": "Alex", "text": "word " * 300}]
+        provider = _ScriptedProvider([json.dumps({"turns": repaired})])
+        result = pipeline.ensure_length(provider, _config_for("brief"), transcript, 300)
+        assert result.word_count() == 300
+        assert "Compress" in provider.prompts[0]
+
+
+class TestDebateFormat:
+    def test_outline_schema_requires_a_stance_per_host(self) -> None:
+        reply = json.dumps(
+            {
+                "title": "T",
+                "segments": [{"heading": "a", "target_words": 50}],
+                "host_angles": {"Alex": "for", "Maya": "against"},
+            }
+        )
+        provider = _ScriptedProvider([reply])
+        outline = pipeline.build_outline(provider, _config_for("debate"), SOURCES, 50)
+        schema = provider.schemas[0]
+        assert schema is not None
+        rendered = json.dumps(schema)
+        assert '"host_angles"' in rendered
+        assert '"required": ["Alex", "Maya"]' in rendered
+        top_required = schema.get("required")
+        assert isinstance(top_required, list)
+        assert "host_angles" in top_required  # native-schema providers must emit it
+        assert outline.host_angles == {"Alex": "for", "Maya": "against"}
+
+    def test_missing_stances_fail_loudly(self) -> None:
+        reply = json.dumps({"title": "T", "segments": [{"heading": "a", "target_words": 50}]})
+        provider = _ScriptedProvider([reply])
+        with pytest.raises(ScriptError, match="did not assign a debate stance"):
+            pipeline.build_outline(provider, _config_for("debate"), SOURCES, 50)
+
+    def test_fake_provider_assigns_stances(self) -> None:
+        outline = pipeline.build_outline(FakeProvider(), _config_for("debate"), SOURCES, 300)
+        assert set(outline.host_angles) == {"Alex", "Maya"}
+        assert all(stance for stance in outline.host_angles.values())
+
+    def test_stances_reach_every_dialogue_request(self) -> None:
+        config = _config_for("debate")
+        outline = Outline(
+            title="T",
+            segments=[
+                OutlineSegment(heading="one", target_words=60),
+                OutlineSegment(heading="two", target_words=60),
+            ],
+            host_angles={"Alex": "argues for", "Maya": "argues against"},
+        )
+        reply = json.dumps({"turns": [{"speaker": "Alex", "text": "hello"}]})
+        provider = _ScriptedProvider([reply, reply])
+        pipeline.write_dialogue(provider, config, SOURCES, outline)
+        for prompt in provider.prompts:
+            assert "Assigned stance (argue this side all episode): argues for" in prompt
+            assert "Assigned stance (argue this side all episode): argues against" in prompt
+
+    def test_unknown_stance_keys_are_dropped(self) -> None:
+        reply = json.dumps(
+            {
+                "title": "T",
+                "segments": [{"heading": "a", "target_words": 50}],
+                "host_angles": {"Narrator": "meta", "Alex": "for", "Maya": "against"},
+            }
+        )
+        provider = _ScriptedProvider([reply])
+        outline = pipeline.build_outline(provider, _config_for("debate"), SOURCES, 50)
+        assert outline.host_angles == {"Alex": "for", "Maya": "against"}
+
+    def test_blank_stance_counts_as_missing(self) -> None:
+        reply = json.dumps(
+            {
+                "title": "T",
+                "segments": [{"heading": "a", "target_words": 50}],
+                "host_angles": {"Alex": "   ", "Maya": "against"},
+            }
+        )
+        provider = _ScriptedProvider([reply])
+        with pytest.raises(ScriptError, match="did not assign a debate stance to Alex"):
+            pipeline.build_outline(provider, _config_for("debate"), SOURCES, 50)
+
+    def test_case_mangled_stance_keys_are_normalized(self) -> None:
+        reply = json.dumps(
+            {
+                "title": "T",
+                "segments": [{"heading": "a", "target_words": 50}],
+                "host_angles": {"alex ": "for", "MAYA [the guide]": "against"},
+            }
+        )
+        provider = _ScriptedProvider([reply])
+        outline = pipeline.build_outline(provider, _config_for("debate"), SOURCES, 50)
+        assert outline.host_angles == {"Alex": "for", "Maya": "against"}
+
+    def test_volunteered_angles_are_dropped_outside_debate(self) -> None:
+        reply = json.dumps(
+            {
+                "title": "T",
+                "segments": [{"heading": "a", "target_words": 50}],
+                "host_angles": {"Alex": "pro", "Maya": "con"},
+            }
+        )
+        provider = _ScriptedProvider([reply])
+        outline = pipeline.build_outline(provider, AppConfig(), SOURCES, 50)
+        assert outline.host_angles == {}
+        turn = json.dumps({"turns": [{"speaker": "Alex", "text": "hi"}]})
+        dialogue_provider = _ScriptedProvider([turn])
+        pipeline.write_dialogue(dialogue_provider, AppConfig(), SOURCES, outline)
+        assert "Assigned stance" not in dialogue_provider.prompts[0]
+
+    def test_non_debate_outline_schema_has_no_angles(self) -> None:
+        reply = json.dumps({"title": "T", "segments": [{"heading": "a", "target_words": 50}]})
+        provider = _ScriptedProvider([reply])
+        pipeline.build_outline(provider, AppConfig(), SOURCES, 50)
+        assert "host_angles" not in json.dumps(provider.schemas[0])
+
+    def test_expansion_carries_the_no_padding_rule(self) -> None:
+        transcript = Transcript(
+            title="T", hosts=["Alex", "Maya"], turns=[Turn(speaker="Alex", text="w " * 50)]
+        )
+        repaired = [{"speaker": "Maya", "text": "word " * 100}]
+        provider = _ScriptedProvider([json.dumps({"turns": repaired})])
+        pipeline.ensure_length(provider, _config_for("debate"), transcript, 100)
+        assert formats.FORMATS["debate"].extend_guidance in provider.prompts[0]
+
+    def test_polish_uses_the_adversarial_brief(self) -> None:
+        polished = [{"speaker": "Maya", "text": "sharper line"}]
+        provider = _ScriptedProvider([json.dumps({"turns": polished})])
+        transcript = Transcript(
+            title="T",
+            hosts=["Alex", "Maya"],
+            turns=[Turn(speaker="Alex", text="one two three")],
+            format="debate",
+        )
+        pipeline.polish_dialogue(provider, _config_for("debate"), transcript)
+        assert provider.systems[0] == formats.FORMATS["debate"].system_prompt
+        assert formats.FORMATS["debate"].polish_brief in provider.prompts[0]
+
+
+class TestCritiqueFormat:
+    def test_review_source_drafts_then_reflects(self) -> None:
+        review = pipeline.review_source(FakeProvider(), _config_for("critique"), SOURCES)
+        assert len(review.findings) >= 3
+        assert all(finding.anchor for finding in review.findings)
+
+    def test_reflection_pass_sees_draft_and_document(self) -> None:
+        draft = {
+            "strengths": ["s"],
+            "findings": [
+                {"summary": "a", "anchor": "b", "detail": "c", "suggestion": "d"},
+                {"summary": "e", "anchor": "f", "detail": "g", "suggestion": "h"},
+                {"summary": "i", "anchor": "j", "detail": "k", "suggestion": "l"},
+            ],
+            "questions": [],
+        }
+        provider = _ScriptedProvider([json.dumps(draft), json.dumps(draft)])
+        pipeline.review_source(provider, _config_for("critique"), SOURCES)
+        assert provider.systems == [formats.CRITIQUE_REVIEW_PROMPT] * 2
+        assert "Re-examine each draft finding" in provider.prompts[1]
+        assert SOURCES in provider.prompts[1]
+
+    def test_outline_dialogue_ifies_the_review(self) -> None:
+        config = _config_for("critique")
+        review = pipeline.review_source(FakeProvider(), config, SOURCES)
+        reply = json.dumps({"title": "T", "segments": [{"heading": "a", "target_words": 50}]})
+        provider = _ScriptedProvider([reply])
+        pipeline.build_outline(provider, config, SOURCES, 50, review=review)
+        assert "A structured review of the material" in provider.prompts[0]
+        assert review.findings[0].summary in provider.prompts[0]
+        assert formats.FORMATS["critique"].outline_brief in provider.prompts[0]
+
+    def test_transcript_records_the_format(self) -> None:
+        config = _config_for("critique")
+        outline = pipeline.build_outline(FakeProvider(), config, SOURCES, 300)
+        transcript = pipeline.write_dialogue(FakeProvider(), config, SOURCES, outline)
+        assert transcript.format == "critique"
+        assert transcript.hosts == ["Alex", "Maya"]

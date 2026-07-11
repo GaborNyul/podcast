@@ -46,11 +46,32 @@ uv run podcast synthesize
 
 # ...or do both in one shot:
 uv run podcast create paper.pdf -d 15 --engine kokoro --provider ollama
+
+# ...and pick the conversation format (deep-dive is the default):
+uv run podcast create paper.pdf --format debate
 ```
 
 Useful commands: `podcast doctor` (environment checks), `podcast engines` /
-`podcast voices` (what can this machine speak with), `podcast config` (resolved
-configuration as JSON).
+`podcast voices` (what can this machine speak with), `podcast formats` (the
+audio overview formats), `podcast config` (resolved configuration as JSON).
+
+## Formats
+
+NotebookLM-style audio overview formats (ADR 0013), selected with `--format`/`-f`
+on `generate`/`create` or `format` under `[script]`:
+
+| format      | speakers  | default length | what it is |
+|-------------|-----------|----------------|------------|
+| `deep-dive` | two hosts | ~10 min        | the default: a detailed, banter-rich exploration of the sources |
+| `brief`     | solo      | ~2 min         | hook, the 2-4 essential points, one landing line — never padded |
+| `debate`    | two hosts | ~7 min         | hosts argue opposing stances on the sources' real open question; no verdict |
+| `critique`  | two hosts | ~9 min         | an anchored, constructive expert review of the material with concrete fixes |
+
+Brief is narrated by one host — the first configured host unless `[script]
+solo_host = "Maya"` picks another. Debate assigns each host a stance at the
+outline stage; Critique runs a structured review pass over the sources before
+outlining. Each new format's prompt was selected by a judged bakeoff
+(`docs/adr/0013-audio-overview-formats.md`).
 
 ## Configuration
 
@@ -64,6 +85,8 @@ model = "qwen3:30b-a3b-instruct-2507"      # omit to use the provider's default
 
 [script]
 default_minutes = 10
+format = "deep-dive"                        # deep-dive | brief | debate | critique
+solo_host = "Maya"                          # who narrates solo formats (brief)
 [[script.hosts]]
 name = "Alex"
 gender = "male"

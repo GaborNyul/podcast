@@ -64,9 +64,26 @@ class TestTranscriptToMarkdown:
             title="Ants", hosts=_HOSTS, turns=[Turn(speaker="Alex", text="Hi.")]
         )
         text = transcript_to_markdown(transcript)
-        assert text.startswith('---\ntitle: "Ants"\nhosts: ["Alex", "Maya"]\n---\n')
+        assert text.startswith(
+            '---\ntitle: "Ants"\nhosts: ["Alex", "Maya"]\nformat: "deep-dive"\n---\n'
+        )
         assert "**Alex:** Hi." in text
         assert "Edit freely" in text
+
+    def test_format_line_round_trips(self) -> None:
+        transcript = Transcript(
+            title="T", hosts=["Maya"], turns=[Turn(speaker="Maya", text="Hi.")], format="brief"
+        )
+        text = transcript_to_markdown(transcript)
+        assert 'format: "brief"' in text
+        parsed = markdown_to_transcript(text)
+        assert parsed == transcript
+        assert parsed.format == "brief"
+        assert parsed.hosts == ["Maya"]
+
+    def test_missing_format_line_defaults_to_deep_dive(self) -> None:
+        text = '---\ntitle: "T"\nhosts: ["Alex", "Maya"]\n---\n\n**Alex:** hi\n'
+        assert markdown_to_transcript(text).format == "deep-dive"
 
     def test_delivery_note_rides_in_the_speaker_token(self) -> None:
         transcript = Transcript(

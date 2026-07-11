@@ -36,7 +36,7 @@
       "items": {
         "type": "string"
       },
-      "minItems": 2,
+      "minItems": 1,
       "title": "Hosts",
       "type": "array"
     },
@@ -46,6 +46,11 @@
       },
       "title": "Turns",
       "type": "array"
+    },
+    "format": {
+      "default": "deep-dive",
+      "title": "Format",
+      "type": "string"
     }
   },
   "required": [
