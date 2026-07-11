@@ -151,7 +151,7 @@ def _run_generate(
 def generate_command(
     sources: Annotated[list[Path], typer.Argument(help="Source documents (txt/md/html/pdf/docx).")],
     duration: Annotated[
-        int, typer.Option("--duration", "-d", min=0, help="Target minutes (0 = config default).")
+        int, typer.Option("--duration", "-d", min=0, help="Target minutes (0 = format default).")
     ] = 0,
     provider_name: Annotated[
         str | None, typer.Option("--provider", help="LLM provider override.")
@@ -320,7 +320,7 @@ def synthesize_command(
 def create_command(
     sources: Annotated[list[Path], typer.Argument(help="Source documents (txt/md/html/pdf/docx).")],
     duration: Annotated[
-        int, typer.Option("--duration", "-d", min=0, help="Target minutes (0 = config default).")
+        int, typer.Option("--duration", "-d", min=0, help="Target minutes (0 = format default).")
     ] = 0,
     provider_name: Annotated[
         str | None, typer.Option("--provider", help="LLM provider override.")
@@ -356,9 +356,10 @@ def formats_command() -> None:
     for spec in formats_mod.FORMATS.values():
         current = " (selected)" if spec.key == config.script.format else ""
         minutes = spec.default_minutes or config.script.default_minutes
+        speakers_label = {None: "all hosts", 1: "solo"}.get(spec.speakers, "two hosts")
         table.add_row(
             f"{spec.key}{current}",
-            "solo" if spec.speakers == 1 else "two hosts",
+            speakers_label,
             f"~{minutes} min",
             spec.description,
         )

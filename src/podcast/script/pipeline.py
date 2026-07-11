@@ -35,13 +35,17 @@ def episode_format(config: AppConfig) -> FormatSpec:
 
 
 def episode_hosts(config: AppConfig, spec: FormatSpec) -> list[HostSpec]:
-    """The hosts this format actually uses: all of them, or the solo narrator."""
+    """The hosts this format actually uses: all of them (speakers=None), the
+    solo narrator, or the first `speakers` configured hosts — debate/critique
+    define exactly two roles, so extra configured hosts sit those formats out."""
     hosts = list(config.script.hosts)
-    if spec.speakers != 1:
+    if spec.speakers is None:
         return hosts
-    if config.script.solo_host is not None:
-        return [host for host in hosts if host.name == config.script.solo_host]
-    return hosts[:1]
+    if spec.speakers == 1:
+        if config.script.solo_host is not None:
+            return [host for host in hosts if host.name == config.script.solo_host]
+        return hosts[:1]
+    return hosts[: spec.speakers]
 
 
 def _hosts_brief(hosts: list[HostSpec], angles: dict[str, str]) -> str:
@@ -175,13 +179,34 @@ def build_outline(
         schema=_outline_schema(spec, host_names),
     )
     if spec.assigns_stances:
-        missing = [name for name in host_names if not outline.host_angles.get(name, "").strip()]
-        if missing:
-            raise ScriptError(
-                f"the outline did not assign a debate stance to {', '.join(missing)}; "
-                "re-run generate (the model must fill host_angles for every host)"
-            )
+        outline = outline.model_copy(
+            update={"host_angles": _normalized_angles(outline.host_angles, host_names)}
+        )
+    elif outline.host_angles:
+        # A model may volunteer stances the schema never asked for; formats
+        # without stance assignment must not let them leak into later prompts.
+        outline = outline.model_copy(update={"host_angles": {}})
     return _rescale_outline(outline, budget_words)
+
+
+def _normalized_angles(angles: dict[str, str], host_names: list[str]) -> dict[str, str]:
+    """Resolve LLM-emitted stance keys onto real host names (case-insensitive,
+    tolerant of a bracketed-note suffix); every host must end up with a stance."""
+    resolved: dict[str, str] = {}
+    for key, stance in angles.items():
+        try:
+            name = _resolve_speaker(key, host_names)
+        except ScriptError:
+            continue
+        if stance.strip():
+            resolved.setdefault(name, stance.strip())
+    missing = [name for name in host_names if name not in resolved]
+    if missing:
+        raise ScriptError(
+            f"the outline did not assign a debate stance to {', '.join(missing)}; "
+            "re-run generate (the model must fill host_angles for every host)"
+        )
+    return resolved
 
 
 def _dialogue_schema(host_names: list[str]) -> dict[str, object]:

@@ -5,7 +5,7 @@ from collections.abc import Mapping, Sequence
 
 import pytest
 
-from podcast.config import AppConfig
+from podcast.config import AppConfig, HostSpec
 from podcast.errors import ScriptError
 from podcast.llm.base import ChatMessage
 from podcast.llm.fake import FakeProvider
@@ -312,6 +312,28 @@ class TestEpisodeHosts:
         spec = pipeline.episode_format(config)
         assert [host.name for host in pipeline.episode_hosts(config, spec)] == ["Maya"]
 
+    def test_two_person_formats_trim_extra_hosts(self) -> None:
+        third = HostSpec(name="Sam", gender="male", persona="the third voice")
+        for key in ("debate", "critique"):
+            config = _config_for(key)
+            config.script.hosts = [*config.script.hosts, third]
+            spec = pipeline.episode_format(config)
+            names = [host.name for host in pipeline.episode_hosts(config, spec)]
+            assert names == ["Alex", "Maya"]
+
+    def test_deep_dive_keeps_every_configured_host(self) -> None:
+        config = _config_for("deep-dive")
+        config.script.hosts = [
+            *config.script.hosts,
+            HostSpec(name="Sam", gender="male", persona="the third voice"),
+        ]
+        spec = pipeline.episode_format(config)
+        assert [host.name for host in pipeline.episode_hosts(config, spec)] == [
+            "Alex",
+            "Maya",
+            "Sam",
+        ]
+
 
 class TestBriefFormat:
     def test_outline_prompt_carries_brief_shape(self) -> None:
@@ -375,6 +397,9 @@ class TestDebateFormat:
         rendered = json.dumps(schema)
         assert '"host_angles"' in rendered
         assert '"required": ["Alex", "Maya"]' in rendered
+        top_required = schema.get("required")
+        assert isinstance(top_required, list)
+        assert "host_angles" in top_required  # native-schema providers must emit it
         assert outline.host_angles == {"Alex": "for", "Maya": "against"}
 
     def test_missing_stances_fail_loudly(self) -> None:
@@ -392,16 +417,46 @@ class TestDebateFormat:
         config = _config_for("debate")
         outline = Outline(
             title="T",
-            segments=[OutlineSegment(heading="only", target_words=60)],
+            segments=[
+                OutlineSegment(heading="one", target_words=60),
+                OutlineSegment(heading="two", target_words=60),
+            ],
             host_angles={"Alex": "argues for", "Maya": "argues against"},
         )
         reply = json.dumps({"turns": [{"speaker": "Alex", "text": "hello"}]})
-        provider = _ScriptedProvider([reply])
+        provider = _ScriptedProvider([reply, reply])
         pipeline.write_dialogue(provider, config, SOURCES, outline)
-        assert "Assigned stance (argue this side all episode): argues for" in provider.prompts[0]
-        assert (
-            "Assigned stance (argue this side all episode): argues against" in (provider.prompts[0])
+        for prompt in provider.prompts:
+            assert "Assigned stance (argue this side all episode): argues for" in prompt
+            assert "Assigned stance (argue this side all episode): argues against" in prompt
+
+    def test_case_mangled_stance_keys_are_normalized(self) -> None:
+        reply = json.dumps(
+            {
+                "title": "T",
+                "segments": [{"heading": "a", "target_words": 50}],
+                "host_angles": {"alex ": "for", "MAYA [the guide]": "against"},
+            }
         )
+        provider = _ScriptedProvider([reply])
+        outline = pipeline.build_outline(provider, _config_for("debate"), SOURCES, 50)
+        assert outline.host_angles == {"Alex": "for", "Maya": "against"}
+
+    def test_volunteered_angles_are_dropped_outside_debate(self) -> None:
+        reply = json.dumps(
+            {
+                "title": "T",
+                "segments": [{"heading": "a", "target_words": 50}],
+                "host_angles": {"Alex": "pro", "Maya": "con"},
+            }
+        )
+        provider = _ScriptedProvider([reply])
+        outline = pipeline.build_outline(provider, AppConfig(), SOURCES, 50)
+        assert outline.host_angles == {}
+        turn = json.dumps({"turns": [{"speaker": "Alex", "text": "hi"}]})
+        dialogue_provider = _ScriptedProvider([turn])
+        pipeline.write_dialogue(dialogue_provider, AppConfig(), SOURCES, outline)
+        assert "Assigned stance" not in dialogue_provider.prompts[0]
 
     def test_non_debate_outline_schema_has_no_angles(self) -> None:
         reply = json.dumps({"title": "T", "segments": [{"heading": "a", "target_words": 50}]})

@@ -31,7 +31,7 @@ class TestRegistry:
         spec = formats.FORMATS[key]
         low, high = spec.segment_range
         assert 1 <= low <= high
-        assert spec.speakers in (1, 2)
+        assert spec.speakers in (None, 1, 2)
         assert spec.description
         assert spec.label
         if spec.default_minutes is not None:
@@ -58,6 +58,9 @@ class TestDeepDiveIdentity:
     def test_deep_dive_defaults_defer_to_config(self) -> None:
         assert formats.FORMATS["deep-dive"].default_minutes is None
 
+    def test_deep_dive_uses_every_configured_host(self) -> None:
+        assert formats.FORMATS["deep-dive"].speakers is None
+
 
 class TestSharedInvariants:
     """The invariant core every format must carry (TTS and grounding rules)."""
@@ -75,11 +78,12 @@ class TestSharedInvariants:
         assert "Everything asserted comes from the provided sources" in prompt
         assert "Attribution hygiene" in prompt
 
-    def test_neutrality_holds_for_summary_formats_only(self) -> None:
+    def test_every_format_has_its_own_stance_rule(self) -> None:
         assert formats.NEUTRAL_STANCE_RULE in formats.FORMATS["deep-dive"].system_prompt
-        assert formats.NEUTRAL_STANCE_RULE in formats.FORMATS["brief"].system_prompt
-        assert formats.NEUTRAL_STANCE_RULE not in formats.FORMATS["debate"].system_prompt
-        assert formats.NEUTRAL_STANCE_RULE not in formats.FORMATS["critique"].system_prompt
+        # brief: acknowledge-both-sides-fast; debate/critique: taking positions IS the format
+        assert "the listener decides" in formats.FORMATS["brief"].system_prompt
+        for key in ("brief", "debate", "critique"):
+            assert formats.NEUTRAL_STANCE_RULE not in formats.FORMATS[key].system_prompt
 
     def test_grounding_splice_guard_fires_when_sentence_vanishes(
         self, monkeypatch: pytest.MonkeyPatch
@@ -93,8 +97,8 @@ class TestBrief:
     def test_is_solo_with_a_hard_guard(self) -> None:
         spec = formats.FORMATS["brief"]
         assert spec.speakers == 1
-        assert "SOLO episode with only ONE speaker" in spec.system_prompt
-        assert "Do NOT invent or add any other speakers" in spec.system_prompt
+        assert "SOLO format: exactly ONE speaker" in spec.system_prompt
+        assert "Never invent, add, or address" in spec.system_prompt
         assert "SOLO script" in spec.polish_brief
 
     def test_short_is_accepted_never_padded(self) -> None:
@@ -104,7 +108,9 @@ class TestBrief:
         assert spec.default_minutes == 2
 
     def test_bans_generic_intros(self) -> None:
-        assert "Never a generic welcome" in formats.FORMATS["brief"].system_prompt
+        prompt = formats.FORMATS["brief"].system_prompt
+        assert "stated flat, no setup" in prompt
+        assert "no welcome" in formats.FORMATS["brief"].opening_position
 
 
 class TestDebate:
@@ -116,28 +122,39 @@ class TestDebate:
 
     def test_adversarial_register_rules(self) -> None:
         spec = formats.FORMATS["debate"]
-        assert "Agreement glue is OFF" in spec.system_prompt
-        assert "never switching sides" in spec.system_prompt
-        assert "Steelman" in spec.system_prompt
-        assert "PRESERVING the adversarial register" in spec.polish_brief
+        flat = " ".join(spec.system_prompt.split())
+        assert 'Neither says "Right," "Exactly," or "Totally"' in flat
+        assert "from their first line to their last" in flat  # stance is a promise
+        assert "strongest point the other host has" in flat  # steelmanning
+        polish = " ".join(spec.polish_brief.split())
+        assert "keeping both hosts fully in character" in polish
+        assert "no agreement affirmations" in polish
 
     def test_ends_without_a_verdict(self) -> None:
         spec = formats.FORMATS["debate"]
-        assert "no verdict" in spec.system_prompt
-        assert "no verdict" in spec.final_position
+        assert "no verdict, no winner" in " ".join(spec.system_prompt.split())
+        assert "no verdict, no winner" in " ".join(spec.final_position.split())
+
+    def test_is_a_two_person_show(self) -> None:
+        assert formats.FORMATS["debate"].speakers == 2
 
 
 class TestCritique:
     def test_has_a_review_stage_with_anchor_rules(self) -> None:
         spec = formats.FORMATS["critique"]
-        assert spec.review_prompt
-        assert "anchors to something the document actually says" in spec.review_prompt
-        assert "better to say less than to make things up" in spec.review_prompt
+        flat = " ".join(spec.review_prompt.split())
+        assert "No anchor, no finding" in flat
+        assert "at least three findings" in flat
+        assert "Style, formatting, and word choice are out of scope" in flat
 
     def test_overrides_neutrality_explicitly(self) -> None:
         spec = formats.FORMATS["critique"]
-        assert "takes positions about the material's quality" in spec.system_prompt
-        assert "No compliment sandwich" in spec.system_prompt
+        flat = " ".join(spec.system_prompt.split())
+        assert "This show renders judgments" in flat
+        assert "no compliment sandwich" in flat
+
+    def test_is_a_two_person_show(self) -> None:
+        assert formats.FORMATS["critique"].speakers == 2
 
     def test_expansion_adds_findings_not_padding(self) -> None:
         assert "anchored findings" in formats.FORMATS["critique"].extend_guidance

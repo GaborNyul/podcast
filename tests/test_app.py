@@ -1,5 +1,6 @@
 """Tests for podcast.cli.app."""
 
+import json
 from collections.abc import Callable
 from pathlib import Path
 from typing import cast
@@ -535,6 +536,10 @@ class TestFormatsCommand:
             assert key in result.output
         assert "deep-dive (selected)" in result.output
         assert "solo" in result.output
+        assert "all hosts" in result.output  # deep-dive uses every configured host
+        assert "two hosts" in result.output
+        for minutes in ("~10 min", "~2 min", "~7 min", "~9 min"):
+            assert minutes in result.output
 
 
 class TestFormatSelection:
@@ -604,6 +609,64 @@ class TestFormatSelection:
         assert result.exit_code == 0, result.output
         assert engine.renders > 0
         assert len(calls) == 1
+
+    def test_critique_runs_the_review_stage(
+        self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        source = self._source(isolated_env, monkeypatch)
+        result = runner.invoke(
+            app_mod.app,
+            [
+                "generate",
+                str(source),
+                "--provider",
+                "fake",
+                "--format",
+                "critique",
+                "--name",
+                "critique-demo",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert "Reviewing material" in result.output
+        script = (isolated_env / "episodes" / "critique-demo" / "script.md").read_text("utf-8")
+        assert 'format: "critique"' in script
+
+    def test_deep_dive_skips_the_review_stage(
+        self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        source = self._source(isolated_env, monkeypatch)
+        result = runner.invoke(
+            app_mod.app, ["generate", str(source), "-d", "1", "--provider", "fake"]
+        )
+        assert result.exit_code == 0, result.output
+        assert "Reviewing material" not in result.output
+
+    def test_debate_assigns_stances_end_to_end(
+        self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        source = self._source(isolated_env, monkeypatch)
+        result = runner.invoke(
+            app_mod.app,
+            [
+                "generate",
+                str(source),
+                "--provider",
+                "fake",
+                "--format",
+                "debate",
+                "--name",
+                "debate-demo",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        outline = json.loads(
+            (isolated_env / "episodes" / "debate-demo" / "outline.json").read_text("utf-8")
+        )
+        assert set(outline["host_angles"]) == {"Alex", "Maya"}
+        assert all(outline["host_angles"].values())
+        script = (isolated_env / "episodes" / "debate-demo" / "script.md").read_text("utf-8")
+        assert 'format: "debate"' in script
 
     def test_format_default_minutes_apply_without_explicit_duration(
         self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch

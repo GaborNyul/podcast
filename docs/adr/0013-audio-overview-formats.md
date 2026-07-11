@@ -43,6 +43,19 @@ formats stay prompt-level, not agent-level.
   default minutes; deep-dive keeps `script.default_minutes`.
 - Each new format's prompt text is selected by a judged bakeoff (candidates seeded from
   the research corpus, 4 judge lenses, one refinement round), the ADR 0009 methodology.
+  Results (2026-07-11, ~1.5M tokens across three 15-agent workflows, RAG.md source):
+  - **Brief**: the radio-news-craft candidate ("the Bulletin") won 3 of 4 lenses
+    (rank sums C=1, A=6, B=5); its refinement lost the head-to-head 1/3 — original ships.
+  - **Debate**: the persona-driven "fire vs ice" sparring-partners candidate won
+    (B=2, A=5, C=5); the verification round was cut short by an API budget limit,
+    so the un-refined winner ships.
+  - **Critique**: the rubric-forward audit candidate won (B=1, A=3, C=8) and its
+    refinement won the head-to-head 2/3 — refined text ships.
+  A 45-agent adversarial review of the refactor confirmed 9 findings (1 major: no
+  end-to-end test covered the critique review stage wiring), all fixed: volunteered
+  `host_angles` are cleared outside debate, stance keys are normalized
+  case-insensitively, debate/critique trim to their two roles via
+  `FormatSpec.speakers`, and the CLI help/table text was corrected.
 
 ## Consequences
 
