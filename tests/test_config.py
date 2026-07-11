@@ -216,5 +216,22 @@ class TestAppConfig:
         with pytest.raises(ValueError, match="tempo"):
             HostSpec(name="A", gender="male", persona="p", tempo=2.5)
 
+    @pytest.mark.usefixtures("isolated_env")
+    def test_format_defaults_to_deep_dive(self) -> None:
+        config = AppConfig()
+        assert config.script.format == "deep-dive"
+        assert config.script.solo_host is None
+
+    def test_unknown_format_is_rejected_with_choices(self) -> None:
+        with pytest.raises(ValueError, match="deep-dive, brief, debate, critique"):
+            config_mod.ScriptSettings(format="sirens")
+
+    def test_solo_host_must_be_a_configured_host(self) -> None:
+        with pytest.raises(ValueError, match="not a configured host"):
+            config_mod.ScriptSettings(solo_host="Zed")
+
+    def test_solo_host_accepts_a_configured_host(self) -> None:
+        assert config_mod.ScriptSettings(solo_host="Maya").solo_host == "Maya"
+
     def test_module_exposes_no_mutable_singleton(self) -> None:
         assert not hasattr(config_mod, "CONFIG")

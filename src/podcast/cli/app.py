@@ -19,6 +19,7 @@ from podcast.ingest import load_documents, merged_sources_markdown
 from podcast.ingest.tokens import assert_fits_context
 from podcast.llm.registry import create_provider
 from podcast.script import budget as budget_mod
+from podcast.script import formats as formats_mod
 from podcast.script import pipeline
 from podcast.script.models import Transcript, Turn
 from podcast.tts.base import DialogueEngine, DialogueLine
@@ -75,11 +76,27 @@ def config_command() -> None:
     ui.out.print_json(config.model_dump_json())
 
 
-def _apply_overrides(config: AppConfig, provider_name: str | None, engine: str | None) -> None:
+def _apply_overrides(
+    config: AppConfig,
+    provider_name: str | None,
+    engine: str | None,
+    format_key: str | None = None,
+) -> None:
     if provider_name is not None:
         config.llm.provider = provider_name
     if engine is not None:
         config.tts.engine = engine
+    if format_key is not None:
+        # resolve() validates: assignment bypasses the pydantic validator.
+        config.script.format = formats_mod.resolve(format_key).key
+
+
+def _episode_minutes(config: AppConfig, duration: int) -> int:
+    """Explicit -d wins; then the format's default; then the config default."""
+    if duration:
+        return duration
+    spec = formats_mod.resolve(config.script.format)
+    return spec.default_minutes or config.script.default_minutes
 
 
 def _run_generate(
@@ -95,8 +112,14 @@ def _run_generate(
     provider = create_provider(config)
     budget_words = budget_mod.episode_word_budget(config, minutes, config.tts.engine)
 
+    review = None
+    if pipeline.episode_format(config).review_prompt:
+        review_task = progress.add_task("Reviewing material", total=1)
+        review = pipeline.review_source(provider, config, grounding)
+        progress.update(review_task, completed=1)
+
     outline_task = progress.add_task("Planning outline", total=1)
-    outline = pipeline.build_outline(provider, config, grounding, budget_words)
+    outline = pipeline.build_outline(provider, config, grounding, budget_words, review=review)
     progress.update(outline_task, completed=1)
 
     dialogue_task = progress.add_task("Writing dialogue", total=len(outline.segments))
@@ -139,11 +162,15 @@ def generate_command(
     name: Annotated[
         str | None, typer.Option("--name", help="Episode slug (default: from the title).")
     ] = None,
+    format_key: Annotated[
+        str | None,
+        typer.Option("--format", "-f", help="Audio overview format (see `podcast formats`)."),
+    ] = None,
 ) -> None:
     """Generate an editable podcast script (script.md) from source documents."""
     config = load_config()
-    _apply_overrides(config, provider_name, engine)
-    minutes = duration or config.script.default_minutes
+    _apply_overrides(config, provider_name, engine, format_key)
+    minutes = _episode_minutes(config, duration)
     with ui.make_progress() as progress:
         workspace, transcript, _budget = _run_generate(config, sources, minutes, name, progress)
     estimated = budget_mod.estimated_minutes(config, transcript.word_count(), config.tts.engine)
@@ -302,15 +329,40 @@ def create_command(
     name: Annotated[
         str | None, typer.Option("--name", help="Episode slug (default: from the title).")
     ] = None,
+    format_key: Annotated[
+        str | None,
+        typer.Option("--format", "-f", help="Audio overview format (see `podcast formats`)."),
+    ] = None,
 ) -> None:
     """Generate a script and synthesize the episode in one run."""
     config = load_config()
-    _apply_overrides(config, provider_name, engine)
-    minutes = duration or config.script.default_minutes
+    _apply_overrides(config, provider_name, engine, format_key)
+    minutes = _episode_minutes(config, duration)
     with ui.make_progress() as progress:
         workspace, _transcript, _budget = _run_generate(config, sources, minutes, name, progress)
         stats = _run_synthesize(config, workspace, progress)
     _report_synthesis(workspace, stats)
+
+
+@app.command("formats")
+def formats_command() -> None:
+    """List the audio overview formats (brief, deep-dive, debate, critique)."""
+    config = load_config()
+    table = Table(title="Audio overview formats", header_style="cyan")
+    table.add_column("format")
+    table.add_column("speakers")
+    table.add_column("length")
+    table.add_column("description", overflow="fold")
+    for spec in formats_mod.FORMATS.values():
+        current = " (selected)" if spec.key == config.script.format else ""
+        minutes = spec.default_minutes or config.script.default_minutes
+        table.add_row(
+            f"{spec.key}{current}",
+            "solo" if spec.speakers == 1 else "two hosts",
+            f"~{minutes} min",
+            spec.description,
+        )
+    ui.out.print(table)
 
 
 @app.command("engines")

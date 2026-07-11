@@ -47,6 +47,7 @@ def transcript_to_markdown(transcript: Transcript) -> str:
         "---",
         f"title: {json.dumps(transcript.title)}",
         f"hosts: {json.dumps(transcript.hosts)}",
+        f"format: {json.dumps(transcript.format)}",
         "---",
         "",
         _EDIT_HINT,
@@ -58,11 +59,12 @@ def transcript_to_markdown(transcript: Transcript) -> str:
     return "\n".join(lines)
 
 
-def _parse_front_matter(lines: list[str]) -> tuple[str, list[str], int]:
+def _parse_front_matter(lines: list[str]) -> tuple[str, list[str], str, int]:
     if not lines or lines[0].strip() != "---":
         raise ScriptError("script.md must start with a --- front-matter block")
     title: str | None = None
     hosts: list[str] | None = None
+    format_key = "deep-dive"  # scripts predating ADR 0013 carry no format line
     for index, line in enumerate(lines[1:], start=1):
         if line.strip() == "---":
             if title is None or hosts is None:
@@ -73,7 +75,7 @@ def _parse_front_matter(lines: list[str]) -> tuple[str, list[str], int]:
                         f"front matter host {host!r} may not contain '[', ']' or ':' "
                         "(they break the `**Host [note]:** text` line grammar)"
                     )
-            return title, hosts, index + 1
+            return title, hosts, format_key, index + 1
         key, _, raw_value = line.partition(":")
         try:
             value: object = json.loads(raw_value.strip())
@@ -83,6 +85,8 @@ def _parse_front_matter(lines: list[str]) -> tuple[str, list[str], int]:
             title = value
         elif key.strip() == "hosts" and isinstance(value, list):
             hosts = [str(item) for item in value]  # pyright: ignore[reportUnknownVariableType,reportUnknownArgumentType]
+        elif key.strip() == "format" and isinstance(value, str):
+            format_key = value
     raise ScriptError("unterminated front-matter block in script.md")
 
 
@@ -100,7 +104,7 @@ def _split_speaker(token: str, known_hosts: set[str]) -> tuple[str, str] | None:
 def markdown_to_transcript(text: str) -> Transcript:
     """Parse script.md; raises ScriptError with the offending line on bad input."""
     lines = text.splitlines()
-    title, hosts, body_start = _parse_front_matter(lines)
+    title, hosts, format_key, body_start = _parse_front_matter(lines)
     known_hosts = set(hosts)
     turns: list[Turn] = []
     for line_number, line in enumerate(lines[body_start:], start=body_start + 1):
@@ -122,4 +126,4 @@ def markdown_to_transcript(text: str) -> Transcript:
             )
         speaker, delivery = resolved
         turns.append(Turn(speaker=speaker, text=turn_text, delivery=delivery))
-    return Transcript(title=title, hosts=hosts, turns=turns)
+    return Transcript(title=title, hosts=hosts, turns=turns, format=format_key)

@@ -39,6 +39,14 @@
       "minItems": 1,
       "title": "Segments",
       "type": "array"
+    },
+    "host_angles": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Debate format only: the stance each host argues for the whole episode, keyed by host name; empty for every other format.",
+      "title": "Host Angles",
+      "type": "object"
     }
   },
   "required": [

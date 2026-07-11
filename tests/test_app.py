@@ -524,3 +524,105 @@ class TestMain:
     def test_passes_through_clean_runs(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(app_mod, "app", lambda: None)
         app_mod.main()
+
+
+class TestFormatsCommand:
+    @pytest.mark.usefixtures("isolated_env")
+    def test_lists_all_formats_and_marks_selected(self) -> None:
+        result = runner.invoke(app_mod.app, ["formats"])
+        assert result.exit_code == 0
+        for key in ("deep-dive", "brief", "debate", "critique"):
+            assert key in result.output
+        assert "deep-dive (selected)" in result.output
+        assert "solo" in result.output
+
+
+class TestFormatSelection:
+    def _source(self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+        monkeypatch.setattr("podcast.ingest.tokens.load_encoder", lambda: None)
+        source = isolated_env / "notes.md"
+        source.write_text("# Ants\n\nAnts are impressively strong.", encoding="utf-8")
+        return source
+
+    def test_generate_brief_is_solo_and_recorded(
+        self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        source = self._source(isolated_env, monkeypatch)
+        result = runner.invoke(
+            app_mod.app,
+            [
+                "generate",
+                str(source),
+                "--provider",
+                "fake",
+                "--format",
+                "brief",
+                "--name",
+                "solo-demo",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        script = (isolated_env / "episodes" / "solo-demo" / "script.md").read_text("utf-8")
+        assert 'format: "brief"' in script
+        assert 'hosts: ["Alex"]' in script
+        assert "**Maya" not in script
+
+    def test_unknown_format_fails_with_choices(
+        self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        source = self._source(isolated_env, monkeypatch)
+        result = runner.invoke(
+            app_mod.app,
+            ["generate", str(source), "--provider", "fake", "--format", "sirens"],
+        )
+        assert result.exit_code != 0
+        assert isinstance(result.exception, ConfigError)
+        assert "unknown format" in str(result.exception)
+
+    def test_solo_episode_synthesizes_end_to_end(
+        self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        source = self._source(isolated_env, monkeypatch)
+        result = runner.invoke(
+            app_mod.app,
+            [
+                "generate",
+                str(source),
+                "--provider",
+                "fake",
+                "--format",
+                "brief",
+                "--name",
+                "solo-demo",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        engine = _FakeEngine()
+        monkeypatch.setattr(app_mod, "create_engine", _engine_factory(engine))
+        calls = _fake_assemble(monkeypatch)
+        result = runner.invoke(app_mod.app, ["synthesize", "solo-demo"])
+        assert result.exit_code == 0, result.output
+        assert engine.renders > 0
+        assert len(calls) == 1
+
+    def test_format_default_minutes_apply_without_explicit_duration(
+        self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        source = self._source(isolated_env, monkeypatch)
+        result = runner.invoke(
+            app_mod.app,
+            ["generate", str(source), "--provider", "fake", "--format", "brief"],
+        )
+        assert result.exit_code == 0, result.output
+        assert "~2.0" in result.output  # brief's 2-minute default, not the config's 10
+
+    def test_explicit_duration_beats_the_format_default(
+        self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        source = self._source(isolated_env, monkeypatch)
+        result = runner.invoke(
+            app_mod.app,
+            ["generate", str(source), "--provider", "fake", "--format", "brief", "-d", "1"],
+        )
+        assert result.exit_code == 0, result.output
+        assert "~1.0" in result.output
