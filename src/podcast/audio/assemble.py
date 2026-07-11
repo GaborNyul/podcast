@@ -48,6 +48,24 @@ def _silence_file(ffmpeg: str, work_dir: Path, duration_ms: int, sample_rate: in
     return path
 
 
+def tempo_variant(source: Path, tempo: float) -> Path:
+    """Pitch-preserving tempo-adjusted sibling of a rendered segment.
+
+    Derived files live next to the source (`<stem>-tempo<pct>.wav`) and are
+    reused, so tempo changes never re-run the synthesis engine.
+    """
+    if tempo == 1.0:
+        return source
+    target = source.with_name(f"{source.stem}-tempo{round(tempo * 100)}.wav")
+    if target.is_file():
+        return target
+    ffmpeg = find_ffmpeg()
+    scratch = target.with_suffix(".tmp.wav")
+    _run([ffmpeg, "-y", "-i", str(source), "-filter:a", f"atempo={tempo}", str(scratch)])
+    scratch.replace(target)
+    return target
+
+
 def _pause_ms(rng: random.Random, minimum_ms: int, maximum_ms: int, scale: float = 1.0) -> int:
     raw = rng.randint(minimum_ms, maximum_ms) if maximum_ms > minimum_ms else minimum_ms
     return max(_SILENCE_STEP_MS, round(raw * scale / _SILENCE_STEP_MS) * _SILENCE_STEP_MS)

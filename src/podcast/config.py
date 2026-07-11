@@ -26,6 +26,9 @@ class HostSpec(BaseModel):
     # Baseline performance direction for delivery-capable TTS engines, composed
     # with each line's delivery note (e.g. "Speak at a fast, energetic pace.").
     style: str = ""
+    # Pitch-preserving playback tempo for this host's lines (ffmpeg atempo),
+    # applied after synthesis on any engine; 1.1 = 10% faster.
+    tempo: float = Field(default=1.0, ge=0.5, le=2.0)
 
     @field_validator("name")
     @classmethod
@@ -92,8 +95,9 @@ class TTSSettings(BaseModel):
     device: str | None = None
     voices: dict[str, str] = Field(default_factory=dict)
     calibration: dict[str, float] = Field(
-        # qwen3: measured 131 rendered wpm on the Strix Halo box (integration benchmark)
-        default_factory=lambda: {"qwen3": 0.87, "kokoro": 0.85}
+        # Measured rendered-wpm / 150. qwen3: 131 wpm (Strix Halo integration benchmark);
+        # kokoro: 153 wpm (2026-07-11, 1316-word episode with content-aware pacing).
+        default_factory=lambda: {"qwen3": 0.87, "kokoro": 1.02}
     )
     # Qwen3-TTS sampling; low temperature is a documented cause of robotic reads.
     qwen3_temperature: float = 0.8

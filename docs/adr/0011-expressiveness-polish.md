@@ -25,6 +25,11 @@ range; (3) NotebookLM's script pipeline ends with a dedicated disfluency-injecti
   motivation: the vivian voice reads English at ~116 wpm while ryan reads ~159; the instruct
   "Speak at a fast, energetic pace." lifts vivian to ~148 wpm. The composed string joins the
   cache key, so changing a host's style re-renders that host's lines.
+- `HostSpec.tempo` (0.5–2.0, default 1.0) applies a pitch-preserving ffmpeg `atempo` to the
+  host's rendered lines at assembly time. Derived files are cached next to the raw segment
+  (`<key>-tempo<pct>.wav`), so tempo changes never re-run the synthesis engine — the knob
+  exists because instruct-based pace control tops out (vivian: ~148 wpm) below some voices'
+  natural-sounding ceiling.
 - `polish_dialogue` (gated by `script.polish_pass`, default on) rewrites the whole draft
   once for radio texture — disfluencies, interruptions, breaking up stacked long turns,
   sharpening delivery notes — with facts, attributions, and rituals pinned by `POLISH_BRIEF`

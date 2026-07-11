@@ -70,6 +70,7 @@ name = "Maya"
 gender = "female"
 persona = "the guide (lead explainer): explains with vivid analogies and concrete examples"
 style = "Speak at a fast, energetic pace."  # baseline instruct for delivery-capable engines
+tempo = 1.1                                 # pitch-preserving speed-up of this host's lines
 
 [tts]
 engine = "qwen3"                           # qwen3 (GPU) | kokoro (CPU)
@@ -79,8 +80,8 @@ qwen3_temperature = 0.8                    # sampling; lower reads robotic (ADR 
 Alex = "Ryan"
 
 [tts.calibration]                          # measured rendered-wpm / 150 per engine
-qwen3 = 0.85
-kokoro = 0.85
+qwen3 = 0.87
+kokoro = 1.02
 
 [audio]
 pause_min_ms = 200

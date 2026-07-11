@@ -282,6 +282,33 @@ class TestSynthesizeCommand:
         assert "warm, curious" in engine.deliveries  # annotated lines carry their note
         assert "" in engine.deliveries  # neutral lines stay neutral
 
+    def test_host_tempo_derives_faster_segments(
+        self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _generate_episode(isolated_env, monkeypatch)
+        (isolated_env / "podcast.toml").write_text(
+            '[llm]\nprovider = "fake"\n'
+            "[[script.hosts]]\n"
+            'name = "Alex"\ngender = "male"\npersona = "companion"\n'
+            "[[script.hosts]]\n"
+            'name = "Maya"\ngender = "female"\npersona = "guide"\ntempo = 1.1\n',
+            encoding="utf-8",
+        )
+        engine = _FakeEngine()
+        monkeypatch.setattr(app_mod, "create_engine", _engine_factory(engine))
+        variants: list[tuple[Path, float]] = []
+
+        def fake_variant(source: Path, tempo: float) -> Path:
+            variants.append((source, tempo))
+            return source
+
+        monkeypatch.setattr(app_mod, "tempo_variant", fake_variant)
+        _fake_assemble(monkeypatch)
+        result = runner.invoke(app_mod.app, ["synthesize", "demo"])
+        assert result.exit_code == 0, result.output
+        tempos = {tempo for _, tempo in variants}
+        assert tempos == {1.0, 1.1}  # Alex neutral, Maya 10% faster
+
     def test_host_style_is_composed_with_delivery_notes(
         self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

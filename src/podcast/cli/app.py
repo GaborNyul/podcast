@@ -9,7 +9,7 @@ from rich.table import Table
 
 from podcast import __version__, doctor
 from podcast.audio import pacing
-from podcast.audio.assemble import assemble_episode
+from podcast.audio.assemble import assemble_episode, tempo_variant
 from podcast.cli import ui
 from podcast.config import AppConfig, load_config
 from podcast.errors import PodcastError, ScriptError
@@ -174,6 +174,7 @@ def _run_synthesize(config: AppConfig, workspace: Workspace, progress: Progress)
     segment_paths: list[Path] = []
     supports_delivery = engine.info().supports_delivery
     styles = {host.name: host.style for host in config.script.hosts}
+    tempos = {host.name: host.tempo for host in config.script.hosts}
     for turn in spoken:
         voice = voices[turn.speaker]
         delivery = ""
@@ -186,11 +187,10 @@ def _run_synthesize(config: AppConfig, workspace: Workspace, progress: Progress)
         ) -> None:
             engine.synthesize_line(text, voice_id, path, delivery=note)
 
-        segment_paths.append(
-            ensure_segment(
-                workspace.segments_dir, engine.name, voice, turn.text, delivery, render, stats
-            )
+        rendered = ensure_segment(
+            workspace.segments_dir, engine.name, voice, turn.text, delivery, render, stats
         )
+        segment_paths.append(tempo_variant(rendered, tempos.get(turn.speaker, 1.0)))
         progress.advance(task)
 
     assemble_task = progress.add_task("Assembling episode", total=1)

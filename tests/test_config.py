@@ -211,5 +211,10 @@ class TestAppConfig:
         with pytest.raises(ValueError, match="must not be blank"):
             HostSpec(name="   ", gender="male", persona="p")
 
+    def test_host_tempo_defaults_neutral_and_is_bounded(self) -> None:
+        assert HostSpec(name="A", gender="male", persona="p").tempo == 1.0
+        with pytest.raises(ValueError, match="tempo"):
+            HostSpec(name="A", gender="male", persona="p", tempo=2.5)
+
     def test_module_exposes_no_mutable_singleton(self) -> None:
         assert not hasattr(config_mod, "CONFIG")

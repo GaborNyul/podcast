@@ -75,6 +75,30 @@ class TestFindFfmpeg:
             assemble.find_ffmpeg()
 
 
+class TestTempoVariant:
+    def test_neutral_tempo_returns_source_untouched(
+        self, tmp_path: Path, fake_ffmpeg: _FakeFfmpeg
+    ) -> None:
+        source = _segments(tmp_path, 1)[0]
+        assert assemble.tempo_variant(source, 1.0) is source
+        assert fake_ffmpeg.commands == []
+
+    def test_derives_atempo_sibling(self, tmp_path: Path, fake_ffmpeg: _FakeFfmpeg) -> None:
+        source = _segments(tmp_path, 1)[0]
+        derived = assemble.tempo_variant(source, 1.1)
+        assert derived.name == "seg0-tempo110.wav"
+        assert derived.is_file()
+        assert "atempo=1.1" in fake_ffmpeg.commands[0]
+        assert not list(tmp_path.glob("*.tmp.wav"))
+
+    def test_existing_variant_is_reused(self, tmp_path: Path, fake_ffmpeg: _FakeFfmpeg) -> None:
+        source = _segments(tmp_path, 1)[0]
+        first = assemble.tempo_variant(source, 1.1)
+        second = assemble.tempo_variant(source, 1.1)
+        assert first == second
+        assert len(fake_ffmpeg.commands) == 1
+
+
 class TestAssembleEpisode:
     def test_no_segments_raises(self, tmp_path: Path, fake_ffmpeg: _FakeFfmpeg) -> None:
         del fake_ffmpeg
