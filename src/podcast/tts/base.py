@@ -57,3 +57,8 @@ class DialogueEngine(Protocol):
         """Render the whole conversation, one WAV per line at `out_paths[i]`;
         prosody on every line may depend on all preceding lines."""
         ...
+
+    def cache_token(self, voice: str) -> str:
+        """Content identity of what this voice id resolves to (e.g. clone-reference
+        bytes); joins the dialogue cache key so voice redefinitions re-render."""
+        ...

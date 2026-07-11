@@ -204,6 +204,9 @@ class _FakeDialogueEngine:
         for path in out_paths:
             path.write_bytes(b"RIFF-fake")
 
+    def cache_token(self, voice: str) -> str:
+        return f"token-{voice}"
+
 
 def _engine_factory(engine: object) -> Callable[[AppConfig], object]:
     def factory(_config: AppConfig) -> object:
@@ -346,14 +349,19 @@ class TestSynthesizeCommand:
             return {"Alex": "alex", "Maya": "maya"}
 
         monkeypatch.setattr(app_mod, "resolve_voices", fake_voices)
-        _fake_assemble(monkeypatch)
+        calls = _fake_assemble(monkeypatch)
         result = runner.invoke(app_mod.app, ["synthesize", "demo"])
         assert result.exit_code == 0, result.output
         assert engine.dialogue_calls == 1
+        assert "0 cached" in result.output  # stats stay honest on the dialogue path
+        segments = cast("list[Path]", calls[0]["segment_paths"])
+        assert [path.name for path in segments] == sorted(path.name for path in segments)
+        assert len(segments) == 4  # every spoken turn, in script order
         # unchanged script: whole dialogue is a cache hit
         result = runner.invoke(app_mod.app, ["synthesize", "demo"])
         assert result.exit_code == 0
         assert engine.dialogue_calls == 1
+        assert "4 cached, 0 rendered" in result.output
         # any line edit re-renders the whole dialogue (context-dependent prosody)
         script = workspace / "script.md"
         script.write_text(

@@ -6,7 +6,10 @@ reference's register drives the emotional baseline); inference code comes from a
 commit-pinned checkout of the upstream repo, since no PyPI package exists.
 """
 
+import hashlib
 import os
+import re
+import shutil
 import subprocess
 import sys
 from collections.abc import Sequence
@@ -28,8 +31,14 @@ INSTALL_HINT = (
     "(PyPI deps only — the SoulX source is fetched automatically, pinned to "
     f"{REPO_COMMIT[:12]})"
 )
-# Delivery-note keywords that map onto SoulX's documented paralinguistic tags.
-_TAG_KEYWORDS = (("laugh", "<|laughter|>"), ("sigh", "<|sigh|>"), ("breath", "<|breathing|>"))
+# Delivery-note words that map onto SoulX's documented paralinguistic tags; word-anchored
+# so 'insightful' or 'breathtaking' never inject spurious sighs/breaths.
+_TAG_PATTERNS = (
+    (re.compile(r"\blaugh(s|ing|ter)?\b"), "<|laughter|>"),
+    (re.compile(r"\bsigh(s|ing)?\b"), "<|sigh|>"),
+    (re.compile(r"\bbreath(s|ing|y)?\b"), "<|breathing|>"),
+)
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 class DialogueModel(Protocol):
@@ -42,6 +51,8 @@ def ensure_repo(models_dir: Path) -> Path:
     """Commit-pinned checkout of the SoulX inference source under models_dir."""
     repo = models_dir / "soulx" / "SoulX-Podcast"
     if not (repo / "soulxpodcast").is_dir():
+        if repo.exists():  # interrupted clone; git refuses non-empty destinations
+            shutil.rmtree(repo)
         repo.parent.mkdir(parents=True, exist_ok=True)
         _git("clone", REPO_URL, str(repo))
     _git("-C", str(repo), "checkout", "--quiet", REPO_COMMIT)
@@ -78,9 +89,14 @@ def shim_torchaudio() -> None:
 
 
 def tagged_text(line: DialogueLine) -> str:
-    """Prefix the spoken text with paralinguistic tags its delivery note names."""
-    tags = "".join(tag for word, tag in _TAG_KEYWORDS if word in line.delivery.lower())
-    return f"{tags}{line.text}"
+    """One single-line SoulX utterance: paralinguistic tags named by the delivery
+    note, then the whitespace-flattened text (upstream's parser is single-line)."""
+    text = " ".join(line.text.split())
+    if not text:
+        raise TTSError(f"speaker {line.speaker!r} has an empty line; SoulX needs spoken text")
+    note = line.delivery.lower()
+    tags = "".join(tag for pattern, tag in _TAG_PATTERNS if pattern.search(note))
+    return f"{tags}{text}"
 
 
 class SoulXEngine:
@@ -136,15 +152,27 @@ class SoulXEngine:
             self._process_single_input = process_single_input
         return self._model
 
-    def _reference(self, voice: str) -> tuple[str, str]:
+    def _reference(self, voice: str) -> tuple[Path, str]:
         ref = self._refs.get(voice)
         if ref is None:
             raise TTSError(f"no SoulX reference for voice {voice!r}; add it under [tts.soulx_refs]")
         wav = Path(ref)
+        if not wav.is_absolute() and not wav.is_file() and (_REPO_ROOT / ref).is_file():
+            wav = _REPO_ROOT / ref  # the shipped defaults resolve from any cwd
         transcript = wav.with_suffix(".txt")
         if not wav.is_file() or not transcript.is_file():
             raise TTSError(f"SoulX reference {wav} (with sidecar .txt transcript) not found")
-        return str(wav), transcript.read_text(encoding="utf-8").strip()
+        return wav, transcript.read_text(encoding="utf-8").strip()
+
+    def cache_token(self, voice: str) -> str:
+        """Identity of the cloned voice: the reference files' content, so re-pointing
+        or re-minting a reference invalidates cached dialogue audio."""
+        wav, transcript = self._reference(voice)
+        digest = hashlib.sha256()
+        digest.update(wav.read_bytes())
+        digest.update(b"\x00")
+        digest.update(transcript.encode("utf-8"))
+        return digest.hexdigest()
 
     def synthesize_line(self, text: str, voice: str, out_path: Path, *, delivery: str = "") -> None:
         self.synthesize_dialogue(
@@ -169,7 +197,7 @@ class SoulXEngine:
             data = self._process_single_input(
                 self._dataset,
                 texts,
-                [wav for wav, _ in refs],
+                [str(wav) for wav, _ in refs],
                 [text for _, text in refs],
                 False,
                 None,
@@ -183,5 +211,9 @@ class SoulXEngine:
             raise TTSError(f"soulx returned {len(wavs)} turns for {len(out_paths)} lines")
         from podcast.tts.kokoro import write_wav
 
+        # Scratch-then-replace: a crash mid-write must never leave a final path that
+        # the whole-dialogue cache would mistake for a completed segment (ADR 0007).
         for wav, out_path in zip(wavs, out_paths, strict=True):
-            write_wav(out_path, wav.squeeze(0).cpu().numpy(), SAMPLE_RATE)
+            scratch = out_path.with_suffix(".tmp.wav")
+            write_wav(scratch, wav.squeeze(0).cpu().numpy(), SAMPLE_RATE)
+            scratch.replace(out_path)

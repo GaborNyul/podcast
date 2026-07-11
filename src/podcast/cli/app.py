@@ -183,6 +183,10 @@ def _dialogue_segments(
         for turn in spoken
     ]
     digest = hashlib.sha256()
+    for voice in sorted({voices[line.speaker] for line in lines}):
+        for part in (voice, engine.cache_token(voice)):
+            digest.update(part.encode("utf-8"))
+            digest.update(b"\x00")
     for line in lines:
         for part in (engine.name, voices[line.speaker], line.text, line.delivery):
             digest.update(part.encode("utf-8"))

@@ -50,7 +50,8 @@ def _install_fakes(monkeypatch: pytest.MonkeyPatch, models_dir: Path) -> None:
     _FakeModel.turns_out = 0
     _PROCESS_CALLS.clear()
 
-    def _snapshot(_model_id: str) -> str:
+    def _snapshot(_model_id: str, revision: str = "") -> str:
+        assert revision == soulx.MODEL_REVISION
         return "/weights"
 
     def _initiate(_seed: int, _path: str, _engine: str, _fp16: bool) -> tuple[_FakeModel, str]:
@@ -86,8 +87,8 @@ def _config(tmp_path: Path) -> AppConfig:
     refs_dir = tmp_path / "refs"
     refs_dir.mkdir(parents=True, exist_ok=True)
     for name in ("alex", "maya"):
-        (refs_dir / f"{name}.wav").write_bytes(b"RIFF")
-        (refs_dir / f"{name}.txt").write_text("Reference transcript.", encoding="utf-8")
+        (refs_dir / f"{name}.wav").write_bytes(f"RIFF-{name}".encode())
+        (refs_dir / f"{name}.txt").write_text(f"{name} reference transcript.", encoding="utf-8")
     return AppConfig(
         paths=PathsSettings(models_dir=tmp_path / "models"),
         tts=TTSSettings(
@@ -118,6 +119,18 @@ class TestTaggedText:
         line = DialogueLine(speaker="A", text="Hi.", delivery="laughing, then a sigh")
         assert soulx.tagged_text(line) == "<|laughter|><|sigh|>Hi."
 
+    def test_substring_lookalikes_do_not_tag(self) -> None:
+        line = DialogueLine(speaker="A", text="Hi.", delivery="insightful, breathtaking sweep")
+        assert soulx.tagged_text(line) == "Hi."
+
+    def test_multiline_text_is_flattened_for_the_single_line_parser(self) -> None:
+        line = DialogueLine(speaker="A", text="first\nsecond  line")
+        assert soulx.tagged_text(line) == "first second line"
+
+    def test_empty_text_raises(self) -> None:
+        with pytest.raises(TTSError, match="empty line"):
+            soulx.tagged_text(DialogueLine(speaker="A", text="  \n "))
+
 
 class TestEnsureRepo:
     def test_clones_once_then_checks_out_pin(
@@ -137,6 +150,23 @@ class TestEnsureRepo:
         assert calls[1][2:] == ("checkout", "--quiet", soulx.REPO_COMMIT)
         soulx.ensure_repo(tmp_path)  # second call: checkout only
         assert [call[0] for call in calls] == ["clone", "-C", "-C"]
+
+    def test_interrupted_clone_is_repaired(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        partial = tmp_path / "soulx" / "SoulX-Podcast"
+        (partial / ".git").mkdir(parents=True)  # clone died before checkout
+        calls: list[str] = []
+
+        def fake_git(*args: str) -> None:
+            calls.append(args[0])
+            if args[0] == "clone":
+                assert not partial.exists()  # wreckage cleared before cloning
+                (Path(args[-1]) / "soulxpodcast").mkdir(parents=True)
+
+        monkeypatch.setattr(soulx, "_git", fake_git)
+        soulx.ensure_repo(tmp_path)
+        assert calls[0] == "clone"
 
     def test_git_failure_raises_tts_error(self, tmp_path: Path) -> None:
         with pytest.raises(TTSError, match="cannot fetch SoulX source"):
@@ -328,6 +358,31 @@ class TestSoulXEngine:
             engine.synthesize_dialogue(
                 [DialogueLine(speaker="A", text="hi")], {"A": "alex"}, [tmp_path / "0.wav"]
             )
+
+    def test_writes_are_atomic_no_scratch_left_behind(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        _install_fakes(monkeypatch, tmp_path / "models")
+        _FakeModel.turns_out = 2
+        engine = soulx.SoulXEngine(_config(tmp_path))
+        engine.synthesize_dialogue(_lines(), VOICES, [tmp_path / "0.wav", tmp_path / "1.wav"])
+        assert not list(tmp_path.glob("*.tmp.wav"))
+
+    def test_cache_token_tracks_reference_content(self, tmp_path: Path) -> None:
+        config = _config(tmp_path)
+        engine = soulx.SoulXEngine(config)
+        alex_token = engine.cache_token("alex")
+        assert alex_token != engine.cache_token("maya")
+        assert alex_token == soulx.SoulXEngine(config).cache_token("alex")  # stable
+        Path(config.tts.soulx_refs["alex"]).write_bytes(b"RIFF-new-take")
+        assert soulx.SoulXEngine(config).cache_token("alex") != alex_token
+
+    def test_default_relative_refs_resolve_from_any_cwd(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        engine = soulx.SoulXEngine(AppConfig())  # shipped assets/voices/soulx defaults
+        assert len(engine.cache_token("alex")) == 64
 
     def test_synthesize_line_delegates_to_dialogue(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path

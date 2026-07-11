@@ -195,6 +195,45 @@ class TestCheckEngine:
         config.tts.engine = "qwen3"
         assert doctor.check_engine(config).name == "qwen3 engine"
 
+    def test_dispatches_to_soulx_missing_extra(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import sys
+
+        monkeypatch.setitem(sys.modules, "s3tokenizer", None)
+        config = _config_in(tmp_path)
+        config.tts.engine = "soulx"
+        result = doctor.check_engine(config)
+        assert result.name == "soulx engine"
+        assert not result.ok
+        assert "uv sync --extra soulx" in result.hint
+
+    def test_soulx_missing_reference_fails_with_hint(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import sys
+        import types
+
+        monkeypatch.setitem(sys.modules, "s3tokenizer", types.ModuleType("s3tokenizer"))
+        config = _config_in(tmp_path)
+        config.tts.engine = "soulx"
+        config.tts.soulx_refs = {"alex": str(tmp_path / "gone.wav")}
+        result = doctor.check_engine(config)
+        assert not result.ok
+        assert "reference" in result.hint
+
+    def test_soulx_with_shipped_refs_passes(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import sys
+        import types
+
+        monkeypatch.setitem(sys.modules, "s3tokenizer", types.ModuleType("s3tokenizer"))
+        config = _config_in(tmp_path)
+        config.tts.engine = "soulx"
+        result = doctor.check_engine(config)
+        assert result.ok, result.detail
+
     def test_unknown_engine_fails(self, tmp_path: Path) -> None:
         config = _config_in(tmp_path)
         config.tts.engine = "sirens"
