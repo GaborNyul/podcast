@@ -1,5 +1,6 @@
 """Tests for podcast.tts.qwen3 (torch/qwen-tts replaced by typed doubles)."""
 
+import os
 import sys
 import types
 import wave
@@ -34,6 +35,7 @@ class _FakeModel:
         temperature: float = 0.9,
         top_p: float = 1.0,
         repetition_penalty: float = 1.0,
+        max_new_tokens: int = 0,
     ) -> tuple[list[list[float]], int]:
         if _FakeModel.fail:
             raise RuntimeError("hip error")
@@ -46,6 +48,7 @@ class _FakeModel:
                 "temperature": temperature,
                 "top_p": top_p,
                 "repetition_penalty": repetition_penalty,
+                "max_new_tokens": max_new_tokens,
             }
         )
         if _FakeModel.empty:
@@ -113,6 +116,7 @@ class TestQwen3Engine:
             "temperature": 0.8,
             "top_p": 0.9,
             "repetition_penalty": 1.05,
+            "max_new_tokens": qwen3.MAX_NEW_TOKENS,
         }
         with wave.open(str(out), "rb") as handle:
             assert handle.getnframes() == 3
@@ -146,6 +150,22 @@ class TestQwen3Engine:
             "hello", "Ryan", tmp_path / "x.wav", delivery="excited, racing ahead"
         )
         assert _FakeModel.generate_calls[0]["instruct"] == "excited, racing ahead"
+
+    def test_load_defaults_miopen_fast_find_mode(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _install_fakes(monkeypatch, cuda_available=True)
+        monkeypatch.delenv("MIOPEN_FIND_MODE", raising=False)
+        qwen3.Qwen3Engine(AppConfig()).synthesize_line("x", "Ryan", tmp_path / "x.wav")
+        assert os.environ["MIOPEN_FIND_MODE"] == "FAST"
+
+    def test_load_respects_existing_miopen_find_mode(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _install_fakes(monkeypatch, cuda_available=True)
+        monkeypatch.setenv("MIOPEN_FIND_MODE", "NORMAL")
+        qwen3.Qwen3Engine(AppConfig()).synthesize_line("x", "Ryan", tmp_path / "x.wav")
+        assert os.environ["MIOPEN_FIND_MODE"] == "NORMAL"
 
     def test_sampling_overrides_come_from_config(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

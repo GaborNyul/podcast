@@ -6,6 +6,7 @@ HSA_OVERRIDE_GFX_VERSION. Inference goes through the official `qwen-tts` package
 thin adapter; `pytest -m integration -k qwen3` runs the real-model RTF benchmark.
 """
 
+import os
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Protocol, cast
@@ -29,12 +30,15 @@ class SpeechModel(Protocol):
         temperature: float,
         top_p: float,
         repetition_penalty: float,
+        max_new_tokens: int,
     ) -> tuple[Sequence[object], int]: ...
 
 
 MODEL_ID = "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice"
 SAMPLE_RATE = 24000
 LANGUAGE = "English"
+# ~170s of audio at the 12Hz codec — a per-line ceiling so generation can't run away.
+MAX_NEW_TOKENS = 2048
 INSTALL_HINT = (
     "the qwen3 extra is not installed; run `uv sync --extra qwen3` "
     "(pulls the qwen-tts package and TheRock ROCm torch wheels for gfx1151 — see README)"
@@ -56,6 +60,9 @@ class Qwen3Engine:
 
     def _load(self) -> SpeechModel:
         if self._model is None:
+            # New tensor shapes trigger minutes-long exhaustive kernel tuning on
+            # gfx1151 unless MIOpen's fast find mode is on (user env wins).
+            os.environ.setdefault("MIOPEN_FIND_MODE", "FAST")
             try:
                 import torch  # pyright: ignore[reportMissingImports]
                 from qwen_tts import (  # pyright: ignore[reportMissingImports, reportMissingTypeStubs]
@@ -99,6 +106,7 @@ class Qwen3Engine:
                 temperature=self._temperature,
                 top_p=self._top_p,
                 repetition_penalty=self._repetition_penalty,
+                max_new_tokens=MAX_NEW_TOKENS,
             )
         except Exception as exc:
             raise TTSError(f"qwen3 failed to synthesize (voice {voice!r}): {exc}") from exc
