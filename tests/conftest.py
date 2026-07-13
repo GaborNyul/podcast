@@ -15,6 +15,42 @@ _SCRIPTS_DIR = str(REPO_ROOT / "scripts")
 if _SCRIPTS_DIR not in sys.path:
     sys.path.insert(0, _SCRIPTS_DIR)
 
+# mutmut runs the whole suite several times in one process (stats, clean run,
+# per-mutant). That trips Hypothesis' differing_executors health check on the
+# method-based property tests — a false positive here, not a test defect. Only
+# tests without their own @settings inherit this; the rest opt in explicitly.
+if os.environ.get("MUTANT_UNDER_TEST"):
+    from hypothesis import HealthCheck, settings
+
+    settings.register_profile("mutmut", suppress_health_check=[HealthCheck.differing_executors])
+    settings.load_profile("mutmut")
+
+
+@pytest.fixture(autouse=True)
+def _mutmut_absolute_source_paths(  # pyright: ignore[reportUnusedFunction]
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Keep mutation testing working across tests that change the working dir.
+
+    mutmut's trampoline calls ``record_trampoline_hit`` on every mutated function,
+    which does ``Path(p).resolve(strict=True)`` over the configured (relative)
+    ``source_paths``. Tests that ``chdir`` elsewhere (e.g. ``isolated_env``) make
+    that strict resolve raise ``FileNotFoundError``, aborting the mutmut stats run.
+    Anchoring the paths to the mutants root (``REPO_ROOT`` here) makes the resolve
+    cwd-independent. Restored per-test, so mutmut's own bookkeeping is untouched.
+    No-op outside a mutation run.
+    """
+    if not os.environ.get("MUTANT_UNDER_TEST"):
+        return
+    try:
+        from mutmut.configuration import Config
+    except ImportError:
+        return
+    config = Config.get()
+    monkeypatch.setattr(
+        config, "source_paths", [REPO_ROOT / p for p in config.source_paths], raising=False
+    )
+
 
 def write_minimal_docx(path: Path, text: str) -> Path:
     """A smallest-possible OOXML document that mammoth/markitdown can read."""

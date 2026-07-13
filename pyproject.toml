@@ -187,8 +187,17 @@ targets = ["src", "scripts"]
 exclude_dirs = ["tests", ".venv"]
 
 [tool.mutmut]
-paths_to_mutate = "src/podcast/"
-tests_dir = "tests/"
+# mutmut 3.x renamed these keys and its TOML reader passes values through
+# verbatim, so both must be lists: paths_to_mutate/tests_dir (strings) crash
+# config loading with "can only concatenate list (not str) to list".
+source_paths = ["src/podcast/"]
+pytest_add_cli_args_test_selection = ["tests/"]
+# mutmut runs the suite from a mutants/ copy that only holds tests/ + config by
+# default. Copy the repo dirs the suite reads from there: scripts/ (gate-script
+# tests import it via conftest's sys.path), schemas/ (contract tests read the
+# committed JSON Schemas), and assets/ (doctor + SoulX tests resolve the shipped
+# voice references, anchored to the mutants root).
+also_copy = ["scripts/", "schemas/", "assets/"]
 
 [tool.adversarial-review]
 max_iterations = 5          # hard-cap backstop

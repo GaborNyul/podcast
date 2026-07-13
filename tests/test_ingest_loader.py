@@ -95,7 +95,15 @@ class TestLoadDocument:
         source.write_bytes(b"caf\xe9 content")
         assert "content" in load_document(source).markdown
 
-    @settings(suppress_health_check=[HealthCheck.function_scoped_fixture], max_examples=50)
+    @settings(
+        # differing_executors: a false positive under mutmut, which re-runs this
+        # method-based property test across instances in one process.
+        suppress_health_check=[
+            HealthCheck.function_scoped_fixture,
+            HealthCheck.differing_executors,
+        ],
+        max_examples=50,
+    )
     @given(text=st.text(min_size=1).filter(lambda value: value.strip() != ""))
     def test_arbitrary_text_never_crashes(
         self, text: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
