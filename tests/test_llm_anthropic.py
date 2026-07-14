@@ -1,13 +1,14 @@
 """Tests for podcast.llm.anthropic (SDK client replaced by a typed double)."""
 
 from dataclasses import dataclass, field
+from typing import cast
 
 import anthropic
 import httpx
 import pytest
 
 from podcast.errors import ProviderError
-from podcast.llm.anthropic import AnthropicProvider
+from podcast.llm.anthropic import AnthropicProvider, prepare_schema
 from podcast.llm.base import system, user
 
 
@@ -98,7 +99,12 @@ class TestComplete:
         schema: dict[str, object] = {"type": "object", "properties": {}}
         provider.complete([user("q")], temperature=0.5, json_schema=schema)
         call = _last_client().messages.calls[-1]
-        assert call["output_config"] == {"format": {"type": "json_schema", "schema": schema}}
+        expected: dict[str, object] = {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": False,
+        }
+        assert call["output_config"] == {"format": {"type": "json_schema", "schema": expected}}
 
     @pytest.mark.usefixtures("fake_client")
     def test_no_schema_leaves_output_config_not_given(self) -> None:
@@ -114,6 +120,76 @@ class TestComplete:
         with pytest.raises(ProviderError, match="refusal"):
             provider.complete([user("q")], temperature=0.5)
 
+
+class TestPrepareSchema:
+    """Pydantic schemas must be rewritten into the shape structured outputs accept."""
+
+    def test_objects_get_additional_properties_false_recursively(self) -> None:
+        schema: dict[str, object] = {
+            "type": "object",
+            "properties": {"turn": {"type": "object", "properties": {}}},
+            "$defs": {"Turn": {"type": "object", "properties": {}}},
+        }
+        prepared = prepare_schema(schema)
+        assert prepared["additionalProperties"] is False
+        properties = cast("dict[str, dict[str, object]]", prepared["properties"])
+        assert properties["turn"]["additionalProperties"] is False
+        defs = cast("dict[str, dict[str, object]]", prepared["$defs"])
+        assert defs["Turn"]["additionalProperties"] is False
+
+    def test_unsupported_constraint_keywords_are_stripped(self) -> None:
+        schema: dict[str, object] = {
+            "type": "object",
+            "properties": {
+                "segments": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+                "minutes": {"type": "integer", "minimum": 1, "maximum": 30},
+                "title": {"type": "string", "minLength": 1, "maxLength": 80},
+            },
+        }
+        properties = cast("dict[str, dict[str, object]]", prepare_schema(schema)["properties"])
+        assert properties["segments"] == {"type": "array", "items": {"type": "string"}}
+        assert properties["minutes"] == {"type": "integer"}
+        assert properties["title"] == {"type": "string"}
+
+    def test_property_named_like_a_keyword_survives(self) -> None:
+        schema: dict[str, object] = {
+            "type": "object",
+            "properties": {"minimum": {"type": "string"}},
+        }
+        properties = cast("dict[str, dict[str, object]]", prepare_schema(schema)["properties"])
+        assert properties["minimum"] == {"type": "string"}
+
+    def test_data_carrying_keys_are_not_walked(self) -> None:
+        schema: dict[str, object] = {
+            "type": "object",
+            "properties": {
+                "angles": {"type": "object", "default": {"minimum": "keep"}},
+                "kind": {"type": "string", "enum": ["minItems", "other"]},
+            },
+        }
+        properties = cast("dict[str, dict[str, object]]", prepare_schema(schema)["properties"])
+        assert properties["angles"]["default"] == {"minimum": "keep"}
+        assert properties["kind"]["enum"] == ["minItems", "other"]
+
+    def test_schema_valued_additional_properties_is_preserved(self) -> None:
+        schema: dict[str, object] = {"type": "object", "additionalProperties": {"type": "string"}}
+        assert prepare_schema(schema)["additionalProperties"] == {"type": "string"}
+
+    def test_original_schema_is_not_mutated(self) -> None:
+        schema: dict[str, object] = {"type": "object", "properties": {}, "minProperties": 1}
+        prepare_schema(schema)
+        assert schema == {"type": "object", "properties": {}, "minProperties": 1}
+
+    def test_non_dict_nodes_pass_through(self) -> None:
+        schema: dict[str, object] = {
+            "anyOf": [{"type": "object", "properties": {}}, {"type": "null"}]
+        }
+        any_of = cast("list[dict[str, object]]", prepare_schema(schema)["anyOf"])
+        assert any_of[0]["additionalProperties"] is False
+        assert any_of[1] == {"type": "null"}
+
+
+class TestCompleteErrors:
     @pytest.mark.usefixtures("fake_client")
     def test_empty_text_raises_provider_error(self) -> None:
         provider = AnthropicProvider(model="claude-opus-4-8")
