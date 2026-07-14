@@ -55,6 +55,44 @@ class TestResolveVoices:
         with pytest.raises(TTSError, match="no voice registry"):
             voices.resolve_voices(config, "mystery", ["Alex"])
 
+    def test_soulx_rejects_override_from_another_engine(self) -> None:
+        config = AppConfig(tts=TTSSettings(voices={"Alex": "ryan"}))
+        with pytest.raises(TTSError, match="'ryan' .* is a qwen3 voice, but the engine is 'soulx'"):
+            voices.resolve_voices(config, "soulx", ["Alex", "Maya"])
+
+    def test_soulx_accepts_custom_registered_reference(self) -> None:
+        config = AppConfig(
+            tts=TTSSettings(
+                voices={"Alex": "gabor"},
+                soulx_refs={"gabor": "refs/gabor.wav"},
+            )
+        )
+        mapping = voices.resolve_voices(config, "soulx", ["Alex"])
+        assert mapping["Alex"] == "gabor"
+
+    def test_soulx_unknown_override_points_at_refs_section(self) -> None:
+        config = AppConfig(tts=TTSSettings(voices={"Alex": "ghost"}))
+        with pytest.raises(TTSError, match=r"add it under \[tts\.soulx_refs\]"):
+            voices.resolve_voices(config, "soulx", ["Alex"])
+
+    def test_kokoro_rejects_override_from_another_engine(self) -> None:
+        config = AppConfig(tts=TTSSettings(voices={"Alex": "ryan"}))
+        message = "'ryan' .* is a qwen3 voice, but the engine is 'kokoro'"
+        with pytest.raises(TTSError, match=message):
+            voices.resolve_voices(config, "kokoro", ["Alex"])
+
+    def test_kokoro_allows_voice_outside_curated_registry(self) -> None:
+        # The registry lists a curated subset; kokoro itself knows more voices.
+        config = AppConfig(tts=TTSSettings(voices={"Alex": "am_liam"}))
+        mapping = voices.resolve_voices(config, "kokoro", ["Alex"])
+        assert mapping["Alex"] == "am_liam"
+
+    def test_qwen3_override_matches_own_registry_case_insensitively(self) -> None:
+        # qwen-tts accepts lowercase speaker names; 'ryan' is qwen3's own Ryan.
+        config = AppConfig(tts=TTSSettings(voices={"Alex": "ryan"}))
+        mapping = voices.resolve_voices(config, "qwen3", ["Alex"])
+        assert mapping["Alex"] == "ryan"
+
     def test_gender_pool_wraps_around(self) -> None:
         config = AppConfig()
         speakers = [f"M{index}" for index in range(0, 10, 2)]  # five male-position speakers

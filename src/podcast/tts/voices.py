@@ -46,6 +46,38 @@ def voices_for(engine: str) -> list[Voice]:
     return list(ENGINE_VOICES.get(engine, []))
 
 
+def _check_override(config: AppConfig, engine: str, speaker: str, voice: str) -> None:
+    """Reject a [tts.voices] override that cannot work on the active engine.
+
+    soulx is closed-set (a voice must be a [tts.soulx_refs] key); the other
+    registries are curated subsets, so their engines only reject an override
+    that belongs to a different engine's registry.
+    """
+    if engine == "soulx":
+        if voice in config.tts.soulx_refs:
+            return
+    elif any(known.id.lower() == voice.lower() for known in voices_for(engine)):
+        return  # qwen-tts accepts speaker names case-insensitively
+    foreign = next(
+        (
+            other
+            for other, pool in ENGINE_VOICES.items()
+            if other != engine and any(known.id.lower() == voice.lower() for known in pool)
+        ),
+        None,
+    )
+    if foreign is not None:
+        raise TTSError(
+            f"voice {voice!r} for speaker {speaker!r} is a {foreign} voice, but the "
+            f"engine is {engine!r}; update [tts.voices] in podcast.toml"
+        )
+    if engine == "soulx":
+        raise TTSError(
+            f"no SoulX reference for voice {voice!r} (speaker {speaker!r}); "
+            f"add it under [tts.soulx_refs]"
+        )
+
+
 def resolve_voices(config: AppConfig, engine: str, speakers: Sequence[str]) -> dict[str, str]:
     """Map each speaker to a voice id: config override first, then gender defaults."""
     available = voices_for(engine)
@@ -59,6 +91,7 @@ def resolve_voices(config: AppConfig, engine: str, speakers: Sequence[str]) -> d
     for index, speaker in enumerate(speakers):
         override = config.tts.voices.get(speaker)
         if override is not None:
+            _check_override(config, engine, speaker, override)
             mapping[speaker] = override
             continue
         if not available:
