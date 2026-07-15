@@ -6,7 +6,15 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from podcast.emphasis import EMPHASIS_RE, normalize, render_caps, spans, strip_markup, validate
+from podcast.emphasis import (
+    EMPHASIS_RE,
+    normalize,
+    render,
+    render_caps,
+    spans,
+    strip_markup,
+    validate,
+)
 
 # General text plus a star-dense alphabet so malformed markup is generated often.
 _texts = st.one_of(
@@ -21,7 +29,9 @@ class TestEmphasisRe:
         assert match is not None
         assert match.group(1) == "two words"
 
-    @pytest.mark.parametrize("text", ["**", "* *", "* padded*", "*padded *", "*", "*a"])
+    @pytest.mark.parametrize(
+        "text", ["**", "* *", "* padded*", "*padded *", "*", "*a", "*foo\nbar*"]
+    )
     def test_malformed_markup_never_matches(self, text: str) -> None:
         assert EMPHASIS_RE.search(text) is None
 
@@ -47,6 +57,12 @@ class TestSpans:
 
     def test_spans_at_start_and_end_of_string(self) -> None:
         assert spans("*Start* middle *end*") == ["Start", "end"]
+
+    def test_span_never_crosses_a_newline(self) -> None:
+        assert spans("say *foo\nbar* now") == []
+
+    def test_adjacent_spans_both_match(self) -> None:
+        assert spans("*a**b*") == ["a", "b"]
 
 
 class TestStripMarkup:
@@ -92,15 +108,20 @@ class TestNormalize:
     def test_spans_at_start_and_end_of_string(self) -> None:
         assert normalize("*Start* and *end*") == "*Start* and *end*"
 
+    def test_asterisks_paired_across_a_newline_are_strays(self) -> None:
+        assert normalize("say *foo\nbar* now") == "say foo\nbar now"
+
 
 class TestValidate:
     @pytest.mark.parametrize(
-        "text", ["", "no markup at all", "say *two words* loud", "*a* mid *b*"]
+        "text", ["", "no markup at all", "say *two words* loud", "*a* mid *b*", "*a**b*"]
     )
     def test_accepts_clean_and_valid_text(self, text: str) -> None:
         validate(text)
 
-    @pytest.mark.parametrize("text", ["*word", "**", "* padded *", "**bold**", "*a* * *b*"])
+    @pytest.mark.parametrize(
+        "text", ["*word", "**", "* padded *", "**bold**", "*a* * *b*", "*foo\nbar*"]
+    )
     def test_raises_on_malformed_markup(self, text: str) -> None:
         with pytest.raises(ValueError, match="emphasis"):
             validate(text)
@@ -108,6 +129,19 @@ class TestValidate:
     def test_error_names_the_offending_fragment(self) -> None:
         with pytest.raises(ValueError, match=re.escape("stray * here")):
             validate("ok *fine* but stray * here")
+
+
+class TestRender:
+    def test_render_span_is_applied_to_each_valid_span(self) -> None:
+        # The shape the SoulX renderer will use (ADR 0014).
+        marked = render("a *b* and *c d*", lambda span: f"<|s|>{span}<|e|>")
+        assert marked == "a <|s|>b<|e|> and <|s|>c d<|e|>"
+
+    def test_strays_are_dropped_and_plain_text_kept(self) -> None:
+        assert render("a * b *c*", str.upper) == "a  b C"
+
+    def test_whitespace_is_untouched(self) -> None:
+        assert render("  no markup\t here ", str.upper) == "  no markup\t here "
 
 
 class TestRenderCaps:
@@ -125,6 +159,10 @@ class TestRenderCaps:
 
     def test_text_without_markup_is_unchanged(self) -> None:
         assert render_caps("plain text") == "plain text"
+
+    def test_length_changing_unicode_uppercase(self) -> None:
+        # qwen3's instruct clause names the original span while the text renders longer.
+        assert render_caps("*straße*") == "STRASSE"
 
 
 class TestProperties:
@@ -147,3 +185,15 @@ class TestProperties:
     @given(text=_texts)
     def test_strip_output_never_contains_asterisk(self, text: str) -> None:
         assert "*" not in strip_markup(text)
+
+    @given(text=_texts)
+    def test_normalize_never_loses_or_invents_spans(self, text: str) -> None:
+        assert spans(normalize(text)) == spans(text)
+
+    @given(text=_texts)
+    def test_validate_raises_exactly_when_normalize_would_change_text(self, text: str) -> None:
+        if normalize(text) != text:
+            with pytest.raises(ValueError, match="emphasis"):
+                validate(text)
+        else:
+            validate(text)
