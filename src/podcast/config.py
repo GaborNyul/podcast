@@ -133,6 +133,10 @@ class TTSSettings(BaseModel):
             "maya": "assets/voices/soulx/maya.wav",
         }
     )
+    # Render *emphasis* spans as SoulX <|stress_start|>/<|stress_end|> tokens
+    # (ADR 0014). Off drops supports_emphasis, so the CLI strips markup instead;
+    # only lines that actually carry markup change text and re-render.
+    soulx_stress_markup: bool = True
     # Qwen3-TTS sampling; low temperature is a documented cause of robotic reads.
     qwen3_temperature: float = 0.8
     qwen3_top_p: float = 0.9

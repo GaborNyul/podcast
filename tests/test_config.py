@@ -104,6 +104,13 @@ class TestLoadConfig:
         with pytest.raises(ConfigError, match="invalid configuration"):
             load_config(project_file=bad)
 
+    def test_soulx_stress_markup_disabled_via_project_file(self, isolated_env: Path) -> None:
+        (isolated_env / "podcast.toml").write_text(
+            "[tts]\nsoulx_stress_markup = false\n", encoding="utf-8"
+        )
+        config = load_config()
+        assert config.tts.soulx_stress_markup is False
+
     def test_unknown_keys_are_ignored(self, isolated_env: Path) -> None:
         extra = isolated_env / "podcast.toml"
         extra.write_text("[future_section]\nsomething = 1\n", encoding="utf-8")
@@ -197,6 +204,10 @@ class TestAppConfig:
         assert config.tts.qwen3_temperature == 0.8
         assert config.tts.qwen3_top_p == 0.9
         assert config.tts.qwen3_repetition_penalty == 1.05
+
+    @pytest.mark.usefixtures("isolated_env")
+    def test_soulx_stress_markup_defaults_on(self) -> None:
+        assert AppConfig().tts.soulx_stress_markup is True
 
     def test_host_spec_rejects_unknown_gender(self) -> None:
         with pytest.raises(ValueError, match="gender"):

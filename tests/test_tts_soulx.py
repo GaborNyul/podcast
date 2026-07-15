@@ -83,7 +83,7 @@ def _install_fakes(monkeypatch: pytest.MonkeyPatch, models_dir: Path) -> None:
     monkeypatch.setattr(soulx, "ensure_repo", _repo)
 
 
-def _config(tmp_path: Path) -> AppConfig:
+def _config(tmp_path: Path, *, stress_markup: bool = True) -> AppConfig:
     refs_dir = tmp_path / "refs"
     refs_dir.mkdir(parents=True, exist_ok=True)
     for name in ("alex", "maya"):
@@ -97,6 +97,7 @@ def _config(tmp_path: Path) -> AppConfig:
                 "alex": str(refs_dir / "alex.wav"),
                 "maya": str(refs_dir / "maya.wav"),
             },
+            soulx_stress_markup=stress_markup,
         ),
     )
 
@@ -130,6 +131,30 @@ class TestTaggedText:
     def test_empty_text_raises(self) -> None:
         with pytest.raises(TTSError, match="empty line"):
             soulx.tagged_text(DialogueLine(speaker="A", text="  \n "))
+
+    def test_emphasis_span_renders_as_stress_tokens(self) -> None:
+        line = DialogueLine(speaker="A", text="This *matters* now.")
+        assert soulx.tagged_text(line) == "This <|stress_start|>matters<|stress_end|> now."
+
+    def test_every_emphasis_span_gets_its_own_tokens(self) -> None:
+        line = DialogueLine(speaker="A", text="*Big*, really *big* news.")
+        assert soulx.tagged_text(line) == (
+            "<|stress_start|>Big<|stress_end|>, really <|stress_start|>big<|stress_end|> news."
+        )
+
+    def test_stress_tokens_stay_inside_text_after_delivery_tags(self) -> None:
+        line = DialogueLine(speaker="A", text="*Wow.*", delivery="laughing")
+        assert soulx.tagged_text(line) == "<|laughter|><|stress_start|>Wow.<|stress_end|>"
+
+    def test_emphasis_survives_multiline_flattening(self) -> None:
+        line = DialogueLine(speaker="A", text="first\n*second*  line")
+        assert soulx.tagged_text(line) == "first <|stress_start|>second<|stress_end|> line"
+
+    def test_markup_free_text_never_gains_stress_tokens(self) -> None:
+        # Flag-off contract: the CLI pre-strips markup, so the renderer must be
+        # the identity on markup-free text — no stress tokens minted.
+        line = DialogueLine(speaker="A", text="Nothing marked here.")
+        assert soulx.tagged_text(line) == "Nothing marked here."
 
 
 class TestEnsureRepo:
@@ -227,6 +252,26 @@ class TestSoulXEngine:
         assert info.dialogue_native is True
         assert info.supports_delivery is True
         assert info.sample_rate == soulx.SAMPLE_RATE
+
+    def test_info_reports_emphasis_by_default(self, tmp_path: Path) -> None:
+        assert soulx.SoulXEngine(_config(tmp_path)).info().supports_emphasis is True
+
+    def test_info_drops_emphasis_when_stress_markup_disabled(self, tmp_path: Path) -> None:
+        engine = soulx.SoulXEngine(_config(tmp_path, stress_markup=False))
+        assert engine.info().supports_emphasis is False
+
+    def test_stress_tokens_land_after_speaker_prefix_and_tags(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        _install_fakes(monkeypatch, tmp_path / "models")
+        _FakeModel.turns_out = 1
+        engine = soulx.SoulXEngine(_config(tmp_path))
+        engine.synthesize_dialogue(
+            [DialogueLine(speaker="Maya", text="Get *this*.", delivery="laughing")],
+            VOICES,
+            [tmp_path / "0.wav"],
+        )
+        assert _PROCESS_CALLS[0][1] == ["[S1]<|laughter|>Get <|stress_start|>this<|stress_end|>."]
 
     def test_missing_extra_raises_install_hint(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
