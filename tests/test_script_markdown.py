@@ -66,12 +66,23 @@ class TestRoundTrip:
     def test_round_trip_is_total_for_arbitrary_turn_text(self, text: str) -> None:
         """Serialize-then-parse never raises; the text lands in the canonical form."""
         transcript = Transcript(title="T", hosts=_HOSTS, turns=[Turn(speaker="Alex", text=text)])
-        parsed = markdown_to_transcript(transcript_to_markdown(transcript))
+        serialized = transcript_to_markdown(transcript)
+        parsed = markdown_to_transcript(serialized)
         assert parsed.turns[0].text == _canonical_turn_text(text)
+        # Oracle-free idempotence: re-serializing the parse is byte-stable.
+        assert transcript_to_markdown(parsed) == serialized
 
     def test_unicode_title_and_text_survive(self) -> None:
         transcript = Transcript(
             title='Űrhajó: a "nagy" kaland 🚀',
+            hosts=_HOSTS,
+            turns=[Turn(speaker="Maya", text="Szia! Űrhajó — a „nagy” kaland 🚀 [link] `code`")],
+        )
+        assert markdown_to_transcript(transcript_to_markdown(transcript)) == transcript
+
+    def test_markdown_bold_is_canonicalized_to_emphasis(self) -> None:
+        transcript = Transcript(
+            title="T",
             hosts=_HOSTS,
             turns=[Turn(speaker="Maya", text="Szia! **bold** [link] `code`")],
         )
@@ -79,7 +90,6 @@ class TestRoundTrip:
         # `**bold**` is not the emphasis grammar (ADR 0014): write-side
         # canonicalization keeps the inner `*bold*` span and drops the stray
         # outer asterisks; from then on the round-trip is byte-stable.
-        assert parsed.title == transcript.title
         assert parsed.turns[0].text == "Szia! *bold* [link] `code`"
         assert markdown_to_transcript(transcript_to_markdown(parsed)) == parsed
 
@@ -202,7 +212,12 @@ class TestMarkdownToTranscript:
     )
     def test_malformed_emphasis_raises_with_line_number(self, bad_text: str) -> None:
         text = f'---\ntitle: "T"\nhosts: ["Alex", "Maya"]\n---\n\n**Alex:** {bad_text}\n'
-        with pytest.raises(ScriptError, match="line 6.*emphasis"):
+        expected = (
+            r"line 6 has stray or malformed emphasis"
+            r".*stress a word as `\*word\*`"
+            r".*literal '\*' cannot be written"
+        )
+        with pytest.raises(ScriptError, match=expected):
             markdown_to_transcript(text)
 
     def test_delivery_note_is_parsed_from_speaker_token(self) -> None:

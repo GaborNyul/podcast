@@ -8,7 +8,9 @@ contain the grammar's own characters (`[`, `]`, `:`); podcast.config enforces th
 same rule, and the parser rejects front matter that violates it. Turn text may
 carry `*word*` emphasis spans (ADR 0014): the parser rejects malformed emphasis
 with the line number, and writes canonicalize text (stray `*` dropped, valid
-spans kept) so serialized output always parses back.
+spans kept) so serialized output always parses back. The emphasis grammar applies
+to turn text only; delivery notes pass `*` through untouched — they are a
+performance channel, not spoken text.
 """
 
 import json
@@ -138,6 +140,10 @@ def markdown_to_transcript(text: str) -> Transcript:
         try:
             emphasis.validate(turn_text)
         except ValueError as exc:
-            raise ScriptError(f"script.md line {line_number} has {exc}") from exc
+            raise ScriptError(
+                f"script.md line {line_number} has {exc} "
+                "(stress a word as `*word*`; a literal '*' cannot be written — "
+                "remove or reword it)"
+            ) from exc
         turns.append(Turn(speaker=speaker, text=turn_text, delivery=delivery))
     return Transcript(title=title, hosts=hosts, turns=turns, format=format_key)
