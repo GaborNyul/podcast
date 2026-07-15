@@ -274,9 +274,11 @@ class TestQwen3Engine:
         )
         assert _FakeModel.generate_calls[0]["instruct"] == "excited, racing ahead"
 
-    def test_already_uppercase_span_skips_caps_but_keeps_clause(
+    def test_all_caps_span_gets_no_treatment(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        # Round-2 audition: the clause without a CAPS change stressed the wrong
+        # word ("not" instead of RAG) — clause-alone went 0-for-5 across rounds.
         _install_fakes(monkeypatch, cuda_available=True)
         engine = qwen3.Qwen3Engine(AppConfig())
         engine.synthesize_line(
@@ -284,18 +286,29 @@ class TestQwen3Engine:
         )
         call = _FakeModel.generate_calls[0]
         assert call["text"] == "Plain RAG retrieves neighbors from a vector store."
-        assert call["instruct"] == "Put strong emphasis on the word 'RAG'."
+        assert call["instruct"] is None
 
-    def test_two_char_all_caps_span_keeps_clause(
+    def test_two_char_all_caps_span_gets_no_treatment(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        # Already-all-caps beats the short-span exclusion: acronyms keep their clause.
+        # Round-2 audition: the clause-alone treatment of *AI* was inaudible.
         _install_fakes(monkeypatch, cuda_available=True)
         engine = qwen3.Qwen3Engine(AppConfig())
         engine.synthesize_line("The *AI* did this.", "Ryan", tmp_path / "x.wav")
         call = _FakeModel.generate_calls[0]
         assert call["text"] == "The AI did this."
-        assert call["instruct"] == "Put strong emphasis on the word 'AI'."
+        assert call["instruct"] is None
+
+    def test_numeric_span_gets_no_treatment(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Uppercasing cannot change a numeral, so it gets no clause either.
+        _install_fakes(monkeypatch, cuda_available=True)
+        engine = qwen3.Qwen3Engine(AppConfig())
+        engine.synthesize_line("All *100* queries hit.", "Ryan", tmp_path / "x.wav")
+        call = _FakeModel.generate_calls[0]
+        assert call["text"] == "All 100 queries hit."
+        assert call["instruct"] is None
 
     def test_mixed_line_treats_only_clause_eligible_spans(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

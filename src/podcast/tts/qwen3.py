@@ -50,21 +50,17 @@ INSTALL_HINT = (
 EMPHASIS_CLAUSE_TEMPLATE = "Put strong emphasis on the {noun} {names}."
 
 
-# Per-span eligibility, tuned by the 2026-07-15 hardware audition:
-#   1. an already all-caps span ('RAG', 'AI') IS its CAPS form — no text transform,
-#      but the clause still names it (acronym-safe at any length);
-#   2. any other span of <= 2 chars gets no treatment at all — CAPS read 'it' as
-#      the acronym "eye-tee" and the clause-only arm over-emphasized, so the
-#      markup is simply stripped for that span;
-#   3. everything else is uppercased in the text and named in the clause.
-def _clause_eligible(span: str) -> bool:
-    """True when the instruct clause names this span (rules 1 and 3 above)."""
-    return span.isupper() or len(span) > 2
-
-
-def _render_span(span: str) -> str:
-    """CAPS for rule-3 spans; rule-1 and rule-2 spans pass through unchanged."""
-    return span.upper() if not span.isupper() and len(span) > 2 else span
+# Per-span treatment, tuned by the two-round 2026-07-15 hardware audition:
+# CAPS-in-text is the only lever qwen3 reliably follows; the clause merely
+# calibrates an actual CAPS change (clause without a CAPS change went 0-for-5,
+# stressing the wrong word or nothing). So a span is treated — uppercased in
+# the text AND named in the clause — exactly when uppercasing changes a span
+# longer than 2 chars. Everything else gets no treatment, only its markup
+# stripped: short spans (CAPS read 'it' as the acronym "eye-tee") and spans
+# CAPS cannot change (all-caps 'RAG'/'AI', numerals '100').
+def _treated(span: str) -> bool:
+    """True when the span is uppercased in the text and named in the clause."""
+    return len(span) > 2 and span.upper() != span
 
 
 def _emphasis_clause(span_texts: Sequence[str]) -> str:
@@ -132,10 +128,10 @@ class Qwen3Engine:
 
     def synthesize_line(self, text: str, voice: str, out_path: Path, *, delivery: str = "") -> None:
         model = self._load()
-        eligible = [span for span in emphasis.spans(text) if _clause_eligible(span)]
-        # With no clause-eligible span this stays byte-identical to the unmarked
-        # path: the clause is empty, so instruct is the delivery note alone or None.
-        clause = _emphasis_clause(eligible)
+        treated = [span for span in emphasis.spans(text) if _treated(span)]
+        # With no treated span this stays byte-identical to the unmarked path:
+        # the clause is empty, so instruct is the delivery note alone or None.
+        clause = _emphasis_clause(treated)
         note = delivery.strip()
         if clause and note.endswith((".", "!", "?")):
             instruct = f"{note} {clause}"
@@ -143,7 +139,7 @@ class Qwen3Engine:
             instruct = ". ".join(part for part in (note, clause) if part)
         try:
             wavs, sample_rate = model.generate_custom_voice(
-                text=emphasis.render(text, _render_span),
+                text=emphasis.render(text, lambda span: span.upper() if _treated(span) else span),
                 language=LANGUAGE,
                 speaker=voice,
                 instruct=instruct or None,

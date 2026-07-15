@@ -93,6 +93,8 @@ should mark (TODO item #2 covers that loop).
 
 *Postscript (2026-07-15, post-audition): the hardware A/B listening check revised two
 defaults recorded above — `tts.soulx_stress_markup` now defaults to **off** (the stress
-tokens vocalize as garbage; untrained upstream embeddings), and qwen3 gained per-span
-guards (short non-all-caps spans ≤2 chars get no treatment; all-caps spans keep the
-clause only). ADR 0014's Consequences section is the authoritative record.*
+tokens vocalize as garbage; untrained upstream embeddings), and qwen3 gained a per-span
+guard (treatment applies exactly when uppercasing changes a span of ≥3 chars; short
+spans and spans CAPS cannot change — all-caps, numerals — get no treatment, round 2
+having heard clause-alone stress the wrong words or nothing). ADR 0014's Consequences
+section is the authoritative record.*
