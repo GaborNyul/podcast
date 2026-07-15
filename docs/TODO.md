@@ -52,3 +52,20 @@ Replace the qwen3-minted references with voices cloned from real NotebookLM audi
    is worth the timbre, or keep CustomVoice+instruct for qwen3 and clone only for SoulX.
 4. Check the licensing/ToS question of cloning NotebookLM's voices before shipping
    anything beyond local experiments.
+
+## 4. Sweep qwen3_temperature for naturalness (sampling variance dwarfs treatment effects)
+
+The 2026-07-15 emphasis audition (ADR 0014, `scratchpad/emphasis-ab/MANIFEST.md`) found
+that two clips rendered from *byte-identical* inputs (S3-plain vs S3-both-v2: same text,
+no instruct) were judged "most natural" and "overstimulated, not natural" — at the shipped
+`qwen3_temperature = 0.8`, run-to-run variance is larger than most deliberate treatment
+effects. Find the temperature that maximizes natural delivery:
+
+1. Sweep e.g. 0.5 / 0.6 / 0.7 / 0.8 / 0.9 (hold top_p 0.9, repetition_penalty 1.05 fixed
+   first; ADR 0011 chose 0.8 because lower "reads robotic" — re-test that claim per temp).
+2. N ≥ 3 repeat takes per temperature on 2-3 fixed sentences (reuse the
+   `scratchpad/emphasis-ab/` harness pattern) — single clips proved unable to separate
+   treatment from noise; judge take-to-take consistency as well as naturalness.
+3. Blind the listening (shuffled filenames), pick the winner, update `qwen3_temperature`
+   default + `[tts]` docs, and re-run one emphasis A/B round at the new temp to confirm
+   the ADR 0014 verdicts still hold (CAPS+clause wins, guards unchanged).
