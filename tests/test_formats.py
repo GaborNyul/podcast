@@ -12,8 +12,8 @@ from podcast.script import formats, prompts
 # mandate). If this pin fails, the prompt's bytes changed — that must be a
 # deliberate, ADR-backed decision.
 _DEEP_DIVE_SHA256 = (
-    "563664e258b4a39728b85bc04bc804ac"  # pragma: allowlist secret — prompt hash pin
-    "5aa39e806293c1b3bcd2924726637b2c"  # pragma: allowlist secret
+    "91aaea6fe97c735bbe4c386c722749bd"  # pragma: allowlist secret — prompt hash pin
+    "a840eb3a4671d04b52ab5a0590f4a2ff"  # pragma: allowlist secret
 )
 
 
@@ -81,9 +81,18 @@ class TestSharedInvariants:
         flat = " ".join(formats.AUDIO_BLOCK.split())
         assert "no markdown or list notation inside spoken lines" in flat
         assert "with exactly one exception: *word* in single asterisks" in flat
+        assert flat.count("exception:") == 1  # "single exception" is executable
+        # the ban-summary maxim precedes the carve-out: the exception amends
+        # the rule instead of being contradicted by it
+        maxim = flat.index("If it cannot be spoken aloud")
+        assert maxim < flat.index("with exactly one exception")
         assert "Use it sparingly" in flat
         assert "Most lines carry no mark at all." in flat
         assert '"And the entire fix was... *one* line of code."' in flat
+        # channel split: word-level stress stays inline, line-level register
+        # goes in the delivery field — never duplicated across the two
+        assert "Stress stays inline as *word*" in flat
+        assert "never migrates or duplicates into the delivery note" in flat
 
     @pytest.mark.parametrize("key", list(formats.FORMATS))
     def test_every_polish_brief_carries_the_emphasis_mandate(self, key: str) -> None:
@@ -92,6 +101,7 @@ class TestSharedInvariants:
         brief = formats.FORMATS[key].polish_brief
         assert "*word*" in brief
         assert "keep the ones that" in brief
+        assert "a misplaced one" in brief
         assert "never inflate" in brief
 
     @pytest.mark.parametrize("key", list(formats.FORMATS))
