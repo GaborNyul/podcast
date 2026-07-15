@@ -7,11 +7,13 @@ import pytest
 from podcast.errors import ConfigError
 from podcast.script import formats, prompts
 
-# The validated hybrid-v2 deep-dive prompt (ADR 0009). If this pin fails, the
-# prompt's bytes changed — that must be a deliberate, bakeoff-backed decision.
+# The validated hybrid-v2 deep-dive prompt (ADR 0009), amended deliberately by
+# ADR 0014 (the *word* emphasis carve-out in FORMAT FOR AUDIO and the polish
+# mandate). If this pin fails, the prompt's bytes changed — that must be a
+# deliberate, ADR-backed decision.
 _DEEP_DIVE_SHA256 = (
-    "90040487f5c247f3b5ac7f4fcbbcd3ad"  # pragma: allowlist secret — prompt hash pin
-    "66734882659bdc0a21c21c1705d25220"  # pragma: allowlist secret
+    "563664e258b4a39728b85bc04bc804ac"  # pragma: allowlist secret — prompt hash pin
+    "5aa39e806293c1b3bcd2924726637b2c"  # pragma: allowlist secret
 )
 
 
@@ -70,6 +72,27 @@ class TestSharedInvariants:
         prompt = formats.FORMATS[key].system_prompt
         assert formats.AUDIO_BLOCK in prompt  # bans [laughs]-style cues, defines delivery
         assert "no bracketed cues like [laughs]" in prompt
+
+    def test_emphasis_is_the_single_exception_in_the_audio_block(self) -> None:
+        # ADR 0014: *word* stress markup is the one carve-out from the
+        # no-markdown rule — sparing, with the form shown once. It lives in the
+        # shared AUDIO_BLOCK, so test_audio_rules_are_shared_verbatim carries
+        # it into all four formats' system prompts.
+        flat = " ".join(formats.AUDIO_BLOCK.split())
+        assert "no markdown or list notation inside spoken lines" in flat
+        assert "with exactly one exception: *word* in single asterisks" in flat
+        assert "Use it sparingly" in flat
+        assert "Most lines carry no mark at all." in flat
+        assert '"And the entire fix was... *one* line of code."' in flat
+
+    @pytest.mark.parametrize("key", list(formats.FORMATS))
+    def test_every_polish_brief_carries_the_emphasis_mandate(self, key: str) -> None:
+        # ADR 0014: polish keeps/sharpens/moves *word* marks and adds only
+        # sparingly — the same mandate it already has for delivery notes.
+        brief = formats.FORMATS[key].polish_brief
+        assert "*word*" in brief
+        assert "keep the ones that" in brief
+        assert "never inflate" in brief
 
     @pytest.mark.parametrize("key", list(formats.FORMATS))
     def test_listener_and_grounding_are_shared(self, key: str) -> None:
