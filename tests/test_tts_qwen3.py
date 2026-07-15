@@ -250,6 +250,74 @@ class TestQwen3Engine:
         assert call["text"] == "NOT the WHOLE story"
         assert call["instruct"] == "Put strong emphasis on the words 'Not' and 'whole'."
 
+    def test_short_lowercase_span_gets_no_treatment(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # 2026-07-15 audition: CAPS turned 'it' into the acronym "eye-tee", and the
+        # clause-only arm over-emphasized — a short lowercase span is left alone.
+        _install_fakes(monkeypatch, cuda_available=True)
+        engine = qwen3.Qwen3Engine(AppConfig())
+        engine.synthesize_line(
+            "That's *it* — the entire fix was one line.", "Ryan", tmp_path / "x.wav"
+        )
+        call = _FakeModel.generate_calls[0]
+        assert call["text"] == "That's it — the entire fix was one line."
+        assert call["instruct"] is None
+
+    def test_short_lowercase_span_leaves_delivery_note_byte_identical(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _install_fakes(monkeypatch, cuda_available=True)
+        engine = qwen3.Qwen3Engine(AppConfig())
+        engine.synthesize_line(
+            "That's *it*.", "Ryan", tmp_path / "x.wav", delivery="excited, racing ahead"
+        )
+        assert _FakeModel.generate_calls[0]["instruct"] == "excited, racing ahead"
+
+    def test_already_uppercase_span_skips_caps_but_keeps_clause(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _install_fakes(monkeypatch, cuda_available=True)
+        engine = qwen3.Qwen3Engine(AppConfig())
+        engine.synthesize_line(
+            "Plain *RAG* retrieves neighbors from a vector store.", "Ryan", tmp_path / "x.wav"
+        )
+        call = _FakeModel.generate_calls[0]
+        assert call["text"] == "Plain RAG retrieves neighbors from a vector store."
+        assert call["instruct"] == "Put strong emphasis on the word 'RAG'."
+
+    def test_two_char_all_caps_span_keeps_clause(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Already-all-caps beats the short-span exclusion: acronyms keep their clause.
+        _install_fakes(monkeypatch, cuda_available=True)
+        engine = qwen3.Qwen3Engine(AppConfig())
+        engine.synthesize_line("The *AI* did this.", "Ryan", tmp_path / "x.wav")
+        call = _FakeModel.generate_calls[0]
+        assert call["text"] == "The AI did this."
+        assert call["instruct"] == "Put strong emphasis on the word 'AI'."
+
+    def test_mixed_line_treats_only_clause_eligible_spans(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _install_fakes(monkeypatch, cuda_available=True)
+        engine = qwen3.Qwen3Engine(AppConfig())
+        engine.synthesize_line("That's *it*, the *reranker* wins.", "Ryan", tmp_path / "x.wav")
+        call = _FakeModel.generate_calls[0]
+        assert call["text"] == "That's it, the RERANKER wins."
+        assert call["instruct"] == "Put strong emphasis on the word 'reranker'."
+
+    def test_capitalized_span_keeps_caps_and_clause(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Audition winner on mixed case: *Not* renders as NOT and is named as written.
+        _install_fakes(monkeypatch, cuda_available=True)
+        engine = qwen3.Qwen3Engine(AppConfig())
+        engine.synthesize_line("*Not* every query needs retrieval.", "Ryan", tmp_path / "x.wav")
+        call = _FakeModel.generate_calls[0]
+        assert call["text"] == "NOT every query needs retrieval."
+        assert call["instruct"] == "Put strong emphasis on the word 'Not'."
+
     def test_model_loads_once(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         _install_fakes(monkeypatch, cuda_available=True)
         engine = qwen3.Qwen3Engine(AppConfig())

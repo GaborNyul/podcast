@@ -104,12 +104,12 @@ class TestLoadConfig:
         with pytest.raises(ConfigError, match="invalid configuration"):
             load_config(project_file=bad)
 
-    def test_soulx_stress_markup_disabled_via_project_file(self, isolated_env: Path) -> None:
+    def test_soulx_stress_markup_enabled_via_project_file(self, isolated_env: Path) -> None:
         (isolated_env / "podcast.toml").write_text(
-            "[tts]\nsoulx_stress_markup = false\n", encoding="utf-8"
+            "[tts]\nsoulx_stress_markup = true\n", encoding="utf-8"
         )
         config = load_config()
-        assert config.tts.soulx_stress_markup is False
+        assert config.tts.soulx_stress_markup is True
 
     def test_unknown_keys_are_ignored(self, isolated_env: Path) -> None:
         extra = isolated_env / "podcast.toml"
@@ -206,8 +206,10 @@ class TestAppConfig:
         assert config.tts.qwen3_repetition_penalty == 1.05
 
     @pytest.mark.usefixtures("isolated_env")
-    def test_soulx_stress_markup_defaults_on(self) -> None:
-        assert AppConfig().tts.soulx_stress_markup is True
+    def test_soulx_stress_markup_defaults_off(self) -> None:
+        # 2026-07-15 hardware audition: the stress tokens vocalize as garbage
+        # syllables, so the markup is opt-in for experimentation only.
+        assert AppConfig().tts.soulx_stress_markup is False
 
     def test_host_spec_rejects_unknown_gender(self) -> None:
         with pytest.raises(ValueError, match="gender"):

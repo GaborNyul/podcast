@@ -45,9 +45,26 @@ INSTALL_HINT = (
     "(pulls the qwen-tts package and TheRock ROCm torch wheels for gfx1151 — see README)"
 )
 # ADR 0014: emphasis is best-effort — spans render as CAPS in the spoken text and this
-# clause names them in the instruct channel. The A/B listening check may retune the
-# default strategy, so the clause wording lives in this one template.
+# clause names them in the instruct channel. The 2026-07-15 A/B audition confirmed
+# CAPS+instruct as the default strategy; the clause wording lives in this one template.
 EMPHASIS_CLAUSE_TEMPLATE = "Put strong emphasis on the {noun} {names}."
+
+
+# Per-span eligibility, tuned by the 2026-07-15 hardware audition:
+#   1. an already all-caps span ('RAG', 'AI') IS its CAPS form — no text transform,
+#      but the clause still names it (acronym-safe at any length);
+#   2. any other span of <= 2 chars gets no treatment at all — CAPS read 'it' as
+#      the acronym "eye-tee" and the clause-only arm over-emphasized, so the
+#      markup is simply stripped for that span;
+#   3. everything else is uppercased in the text and named in the clause.
+def _clause_eligible(span: str) -> bool:
+    """True when the instruct clause names this span (rules 1 and 3 above)."""
+    return span.isupper() or len(span) > 2
+
+
+def _render_span(span: str) -> str:
+    """CAPS for rule-3 spans; rule-1 and rule-2 spans pass through unchanged."""
+    return span.upper() if not span.isupper() and len(span) > 2 else span
 
 
 def _emphasis_clause(span_texts: Sequence[str]) -> str:
@@ -115,7 +132,10 @@ class Qwen3Engine:
 
     def synthesize_line(self, text: str, voice: str, out_path: Path, *, delivery: str = "") -> None:
         model = self._load()
-        clause = _emphasis_clause(emphasis.spans(text))
+        eligible = [span for span in emphasis.spans(text) if _clause_eligible(span)]
+        # With no clause-eligible span this stays byte-identical to the unmarked
+        # path: the clause is empty, so instruct is the delivery note alone or None.
+        clause = _emphasis_clause(eligible)
         note = delivery.strip()
         if clause and note.endswith((".", "!", "?")):
             instruct = f"{note} {clause}"
@@ -123,7 +143,7 @@ class Qwen3Engine:
             instruct = ". ".join(part for part in (note, clause) if part)
         try:
             wavs, sample_rate = model.generate_custom_voice(
-                text=emphasis.render_caps(text),
+                text=emphasis.render(text, _render_span),
                 language=LANGUAGE,
                 speaker=voice,
                 instruct=instruct or None,

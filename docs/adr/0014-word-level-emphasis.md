@@ -40,7 +40,7 @@ reaching SoulX *is* spoken aloud, so markup must never pass through unrendered.
   word ("Put strong emphasis on the word 'X'.") — best-effort by design (~35–50%
   correct-word hit rate in published fine-grained instruct benchmarks).
 - SoulX renders a span as `<|stress_start|>span<|stress_end|>`, gated by the layered
-  config flag `tts.soulx_stress_markup` (default on). The flag feeds
+  config flag `tts.soulx_stress_markup` (default off — see Consequences). The flag feeds
   `supports_emphasis`, so turning it off routes through the CLI strip path — cache
   invalidation stays correct with no new key component.
 - Pacing heuristics (ADR 0011) read markup-stripped text so a trailing `*` never masks
@@ -55,10 +55,16 @@ reaching SoulX *is* spoken aloud, so markup must never pass through unrendered.
   via the shared `AUDIO_BLOCK`.
 - Cache keys did not gain a field; only lines whose rendered input actually changes
   re-render.
-- qwen3 emphasis is probabilistic, not guaranteed — an A/B listening check (plain vs CAPS
-  vs instruct vs both) validates the default; SoulX's stress tokens are undocumented
-  upstream and may prove inert, in which case the flag turns the feature off without a
-  code change.
+- qwen3 emphasis is probabilistic, not guaranteed — the A/B listening check (plain vs CAPS
+  vs instruct vs both) ran on hardware 2026-07-15 and confirmed CAPS+instruct as the
+  default. It also drove two per-span guards: short lowercase spans (≤2 chars) are
+  excluded from both CAPS and the clause (CAPS read `*it*` as the acronym "eye-tee"), and
+  already-uppercase spans skip the no-op transform but keep the clause.
+- SoulX's stress tokens proved not inert: the same audition heard them vocalize as
+  garbage syllables (they encode as clean single IDs, so the embeddings are untrained
+  upstream), so `tts.soulx_stress_markup` now defaults to off — the "flag turns the
+  feature off without a code change" escape hatch became the default posture, and the
+  flag is opt-in for experimentation.
 - Future engines (VibeVoice, Chatterbox) slot in by declaring their capability and, if
   supported, their own renderer (Chatterbox: CAPS; VibeVoice: strip).
 - The grammar reserves `*` outright: spoken text cannot carry a literal asterisk — the

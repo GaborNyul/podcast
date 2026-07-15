@@ -134,10 +134,13 @@ class TTSSettings(BaseModel):
         }
     )
     # Render *emphasis* spans as SoulX <|stress_start|>/<|stress_end|> tokens
-    # (ADR 0014). Off drops supports_emphasis, so the CLI strips markup instead;
-    # only lines that carry markup change text, so the dialogue re-renders only
-    # when some line does.
-    soulx_stress_markup: bool = True
+    # (ADR 0014). Off by default: the 2026-07-15 hardware audition found the
+    # undocumented stress tokens vocalize as garbage syllables (they encode as
+    # clean single IDs, so the embeddings are simply untrained upstream) —
+    # opt-in for experimentation only. Off drops supports_emphasis, so the CLI
+    # strips markup instead; only lines that carry markup change text, so the
+    # dialogue re-renders only when some line does.
+    soulx_stress_markup: bool = False
     # Qwen3-TTS sampling; low temperature is a documented cause of robotic reads.
     qwen3_temperature: float = 0.8
     qwen3_top_p: float = 0.9

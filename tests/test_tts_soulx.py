@@ -83,7 +83,7 @@ def _install_fakes(monkeypatch: pytest.MonkeyPatch, models_dir: Path) -> None:
     monkeypatch.setattr(soulx, "ensure_repo", _repo)
 
 
-def _config(tmp_path: Path, *, stress_markup: bool = True) -> AppConfig:
+def _config(tmp_path: Path, *, stress_markup: bool = False) -> AppConfig:
     refs_dir = tmp_path / "refs"
     refs_dir.mkdir(parents=True, exist_ok=True)
     for name in ("alex", "maya"):
@@ -259,19 +259,21 @@ class TestSoulXEngine:
         assert info.supports_delivery is True
         assert info.sample_rate == soulx.SAMPLE_RATE
 
-    def test_info_reports_emphasis_by_default(self, tmp_path: Path) -> None:
-        assert soulx.SoulXEngine(_config(tmp_path)).info().supports_emphasis is True
+    def test_info_drops_emphasis_by_default(self) -> None:
+        # 2026-07-15 hardware audition: the stress tokens vocalize as garbage
+        # syllables, so the shipped default routes markup to the CLI strip path.
+        assert soulx.SoulXEngine(AppConfig()).info().supports_emphasis is False
 
-    def test_info_drops_emphasis_when_stress_markup_disabled(self, tmp_path: Path) -> None:
-        engine = soulx.SoulXEngine(_config(tmp_path, stress_markup=False))
-        assert engine.info().supports_emphasis is False
+    def test_info_reports_emphasis_when_stress_markup_enabled(self, tmp_path: Path) -> None:
+        engine = soulx.SoulXEngine(_config(tmp_path, stress_markup=True))
+        assert engine.info().supports_emphasis is True
 
     def test_stress_tokens_land_after_speaker_prefix_and_tags(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         _install_fakes(monkeypatch, tmp_path / "models")
         _FakeModel.turns_out = 1
-        engine = soulx.SoulXEngine(_config(tmp_path))
+        engine = soulx.SoulXEngine(_config(tmp_path, stress_markup=True))
         engine.synthesize_dialogue(
             [DialogueLine(speaker="Maya", text="Get *this*.", delivery="laughing")],
             VOICES,

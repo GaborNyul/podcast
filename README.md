@@ -102,7 +102,7 @@ tempo = 1.1                                 # pitch-preserving speed-up of this 
 [tts]
 engine = "qwen3"                           # qwen3 (GPU) | kokoro (CPU) | soulx (GPU, dialogue-native)
 qwen3_temperature = 0.8                    # sampling; lower reads robotic (ADR 0011)
-soulx_stress_markup = true                 # render *word* stress as SoulX tokens; off = strip (ADR 0014)
+soulx_stress_markup = false                # opt-in: SoulX stress tokens vocalize as garbage (ADR 0014)
 [tts.voices]                               # optional per-speaker voice overrides
                                            # (engine-specific ids — swap when switching engines)
 Alex = "Ryan"
