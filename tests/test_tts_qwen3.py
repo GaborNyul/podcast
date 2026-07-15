@@ -86,6 +86,7 @@ class TestQwen3Engine:
         assert engine.info().device == "cuda"
         assert engine.info().sample_rate == qwen3.SAMPLE_RATE
         assert engine.info().supports_delivery is True
+        assert engine.info().supports_emphasis is True
 
     def test_device_override_from_config(self) -> None:
         config = AppConfig(tts=TTSSettings(device="cpu"))
@@ -188,6 +189,41 @@ class TestQwen3Engine:
         engine = qwen3.Qwen3Engine(AppConfig())
         engine.synthesize_line("hello", "Ryan", tmp_path / "x.wav", delivery="   ")
         assert _FakeModel.generate_calls[0]["instruct"] is None
+
+    def test_emphasis_renders_caps_and_instruct_clause(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _install_fakes(monkeypatch, cuda_available=True)
+        engine = qwen3.Qwen3Engine(AppConfig())
+        engine.synthesize_line("That's the *whole* point", "Ryan", tmp_path / "x.wav")
+        call = _FakeModel.generate_calls[0]
+        assert call["text"] == "That's the WHOLE point"
+        assert call["instruct"] == "Put strong emphasis on the word 'whole'."
+
+    def test_emphasis_clause_appends_to_delivery_note(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _install_fakes(monkeypatch, cuda_available=True)
+        engine = qwen3.Qwen3Engine(AppConfig())
+        engine.synthesize_line(
+            "That's the *whole* point",
+            "Ryan",
+            tmp_path / "x.wav",
+            delivery="excited, racing ahead",
+        )
+        assert _FakeModel.generate_calls[0]["instruct"] == (
+            "excited, racing ahead. Put strong emphasis on the word 'whole'."
+        )
+
+    def test_emphasis_clause_names_multiple_spans_in_original_form(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _install_fakes(monkeypatch, cuda_available=True)
+        engine = qwen3.Qwen3Engine(AppConfig())
+        engine.synthesize_line("*Not* the *whole* story", "Ryan", tmp_path / "x.wav")
+        call = _FakeModel.generate_calls[0]
+        assert call["text"] == "NOT the WHOLE story"
+        assert call["instruct"] == "Put strong emphasis on the words 'Not' and 'whole'."
 
     def test_model_loads_once(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         _install_fakes(monkeypatch, cuda_available=True)

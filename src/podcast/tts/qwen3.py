@@ -11,6 +11,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Protocol, cast
 
+from podcast import emphasis
 from podcast.config import AppConfig
 from podcast.errors import TTSError
 from podcast.tts.base import EngineInfo
@@ -43,6 +44,19 @@ INSTALL_HINT = (
     "the qwen3 extra is not installed; run `uv sync --extra qwen3` "
     "(pulls the qwen-tts package and TheRock ROCm torch wheels for gfx1151 — see README)"
 )
+# ADR 0014: emphasis is best-effort — spans render as CAPS in the spoken text and this
+# clause names them in the instruct channel. The A/B listening check may retune the
+# default strategy, so the clause wording lives in this one template.
+EMPHASIS_CLAUSE_TEMPLATE = "Put strong emphasis on the {noun} {names}."
+
+
+def _emphasis_clause(span_texts: Sequence[str]) -> str:
+    """Instruct clause naming the stressed spans as written; empty when there are none."""
+    if not span_texts:
+        return ""
+    *head, last = (f"'{span}'" for span in span_texts)
+    names = f"{', '.join(head)} and {last}" if head else last
+    return EMPHASIS_CLAUSE_TEMPLATE.format(noun="word" if not head else "words", names=names)
 
 
 class Qwen3Engine:
@@ -92,17 +106,23 @@ class Qwen3Engine:
 
     def info(self) -> EngineInfo:
         return EngineInfo(
-            name=self.name, device=self._device, sample_rate=SAMPLE_RATE, supports_delivery=True
+            name=self.name,
+            device=self._device,
+            sample_rate=SAMPLE_RATE,
+            supports_delivery=True,
+            supports_emphasis=True,
         )
 
     def synthesize_line(self, text: str, voice: str, out_path: Path, *, delivery: str = "") -> None:
         model = self._load()
+        clause = _emphasis_clause(emphasis.spans(text))
+        instruct = ". ".join(part for part in (delivery.strip(), clause) if part)
         try:
             wavs, sample_rate = model.generate_custom_voice(
-                text=text,
+                text=emphasis.render_caps(text),
                 language=LANGUAGE,
                 speaker=voice,
-                instruct=delivery.strip() or None,
+                instruct=instruct or None,
                 temperature=self._temperature,
                 top_p=self._top_p,
                 repetition_penalty=self._repetition_penalty,
