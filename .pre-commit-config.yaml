@@ -1,6 +1,11 @@
 # Standards v3 pre-commit template. mypy/pyright/pip-audit/pip-licenses run as local
 # hooks through `uv run` so they see the project's locked dependencies (the mirrored
 # hook envs would type-check/audit against an empty isolated venv instead).
+
+# commit-msg is needed for the assistant-signature gate; without it a plain
+# `pre-commit install` would wire up pre-commit hooks only and the gate never runs.
+default_install_hook_types: [pre-commit, commit-msg]
+
 repos:
   # General file hygiene
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -47,6 +52,15 @@ repos:
         # rings exhaust the default 8 MB RLIMIT_MEMLOCK (io_uring_queue_init ENOMEM).
         args: ['--config', 'p/python', '--error', '--metrics=off', '--jobs', '1']
         require_serial: true
+
+  # Commit message: block assistant signatures (Standards v3, "Git Commit Rules")
+  - repo: local
+    hooks:
+      - id: no-assistant-signature
+        name: no assistant signature in commit message
+        entry: uv run python scripts/check_commit_msg.py
+        language: system
+        stages: [commit-msg]
 
   # Python: type checking + dependency audits against the real project env
   - repo: local
