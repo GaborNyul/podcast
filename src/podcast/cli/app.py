@@ -237,11 +237,12 @@ def _dialogue_segments(
 def _run_synthesize(config: AppConfig, workspace: Workspace, progress: Progress) -> CacheStats:
     transcript = load_transcript(workspace)
     engine = create_engine(config)
+    info = engine.info()
     voices = resolve_voices(config, engine.name, transcript.hosts)
     stats = CacheStats()
     spoken = [turn for turn in transcript.turns if turn.text.strip()]
-    supports_delivery = engine.info().supports_delivery
-    supports_emphasis = engine.info().supports_emphasis
+    supports_delivery = info.supports_delivery
+    supports_emphasis = info.supports_emphasis
     styles = {host.name: host.style for host in config.script.hosts}
     tempos = {host.name: host.tempo for host in config.script.hosts}
 
@@ -256,7 +257,7 @@ def _run_synthesize(config: AppConfig, workspace: Workspace, progress: Progress)
         return turn.text
 
     rendered_paths: list[Path] = []
-    if engine.info().dialogue_native and isinstance(engine, DialogueEngine):
+    if info.dialogue_native and isinstance(engine, DialogueEngine):
         rendered_paths = _dialogue_segments(
             engine, workspace, spoken, voices, composed, spoken_text, stats, progress
         )
@@ -288,7 +289,7 @@ def _run_synthesize(config: AppConfig, workspace: Workspace, progress: Progress)
         segment_paths,
         workspace.episode_path,
         work_dir=workspace.segments_dir / "work",
-        sample_rate=engine.info().sample_rate,
+        sample_rate=info.sample_rate,
         pause_min_ms=config.audio.pause_min_ms,
         pause_max_ms=config.audio.pause_max_ms,
         bitrate=config.audio.mp3_bitrate,

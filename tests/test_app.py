@@ -258,6 +258,15 @@ def _mark_emphasis(workspace: Path) -> None:
     script.write_text(content.replace("plain terms", "*plain* terms", 1), encoding="utf-8")
 
 
+def _mark_script_before_synthesis(workspace: Path) -> None:
+    """Mark up the pristine script: one line with multiple spans plus a span-only turn."""
+    script = workspace / "script.md"
+    content = script.read_text(encoding="utf-8")
+    assert "plain terms" in content
+    content = content.replace("plain terms", "*plain* *terms*", 1)
+    script.write_text(content.rstrip("\n") + "\n**Alex:** *wow*\n", encoding="utf-8")
+
+
 def _fake_dialogue_voices(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_voices(*_args: object) -> dict[str, str]:
         return {"Alex": "alex", "Maya": "maya"}
@@ -471,6 +480,36 @@ class TestSynthesizeCommand:
         assert result.exit_code == 0
         assert engine.renders == baseline + 1
 
+    def test_marked_script_reaches_non_supporting_engine_markup_free(
+        self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Cold cache with markup already in the script: every render must be stripped.
+        workspace = _generate_episode(isolated_env, monkeypatch)
+        _mark_script_before_synthesis(workspace)
+        engine = _FakeEngine()
+        monkeypatch.setattr(app_mod, "create_engine", _engine_factory(engine))
+        _fake_assemble(monkeypatch)
+        result = runner.invoke(app_mod.app, ["synthesize", "demo"])
+        assert result.exit_code == 0, result.output
+        assert any("plain terms" in text for text in engine.texts)  # spans unwrapped in place
+        assert "wow" in engine.texts  # a turn that is nothing but a span still speaks
+        assert all("*" not in text for text in engine.texts)
+
+    def test_marked_script_reaches_non_supporting_dialogue_engine_markup_free(
+        self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        workspace = _generate_episode(isolated_env, monkeypatch)
+        _mark_script_before_synthesis(workspace)
+        engine = _FakeDialogueEngine()
+        monkeypatch.setattr(app_mod, "create_engine", _engine_factory(engine))
+        _fake_dialogue_voices(monkeypatch)
+        _fake_assemble(monkeypatch)
+        result = runner.invoke(app_mod.app, ["synthesize", "demo"])
+        assert result.exit_code == 0, result.output
+        assert any("plain terms" in text for text in engine.line_texts)
+        assert "wow" in engine.line_texts
+        assert all("*" not in text for text in engine.line_texts)
+
     def test_emphasis_edit_is_free_on_non_supporting_engine(
         self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -483,9 +522,9 @@ class TestSynthesizeCommand:
         _mark_emphasis(workspace)
         result = runner.invoke(app_mod.app, ["synthesize", "demo"])
         assert result.exit_code == 0
-        assert engine.renders == baseline  # stripped text is unchanged -> all hits
-        assert engine.texts  # both runs reached the engine ...
-        assert all("*" not in text for text in engine.texts)  # ... markup-free
+        # Stripped text is unchanged -> all hits; the engine is never invoked while
+        # markup exists (the markup-free guarantee is pinned by the cold-cache test).
+        assert engine.renders == baseline
 
     def test_emphasis_edit_rerenders_only_one_segment_on_supporting_engine(
         self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
@@ -515,8 +554,9 @@ class TestSynthesizeCommand:
         _mark_emphasis(workspace)
         result = runner.invoke(app_mod.app, ["synthesize", "demo"])
         assert result.exit_code == 0
-        assert engine.dialogue_calls == 1  # stripped digest is unchanged -> all hits
-        assert all("*" not in text for text in engine.line_texts)
+        # Stripped digest is unchanged -> all hits; the engine is never invoked while
+        # markup exists (the markup-free guarantee is pinned by the cold-cache test).
+        assert engine.dialogue_calls == 1
 
     def test_dialogue_emphasis_edit_rerenders_on_supporting_engine(
         self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
