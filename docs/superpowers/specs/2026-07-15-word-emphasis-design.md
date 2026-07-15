@@ -88,3 +88,11 @@ Emphasis rendering for engines not yet in the repo (VibeVoice, Chatterbox — su
 recorded above and in ADR 0014); misaki `[word](2)` stress (unreachable via kokoro-onnx);
 multi-level emphasis (`**strong**`); STT-based empirical refinement of how often the LLM
 should mark (TODO item #2 covers that loop).
+
+---
+
+*Postscript (2026-07-15, post-audition): the hardware A/B listening check revised two
+defaults recorded above — `tts.soulx_stress_markup` now defaults to **off** (the stress
+tokens vocalize as garbage; untrained upstream embeddings), and qwen3 gained per-span
+guards (short non-all-caps spans ≤2 chars get no treatment; all-caps spans keep the
+clause only). ADR 0014's Consequences section is the authoritative record.*

@@ -57,7 +57,7 @@ reaching SoulX *is* spoken aloud, so markup must never pass through unrendered.
   re-render.
 - qwen3 emphasis is probabilistic, not guaranteed — the A/B listening check (plain vs CAPS
   vs instruct vs both) ran on hardware 2026-07-15 and confirmed CAPS+instruct as the
-  default. It also drove two per-span guards: short lowercase spans (≤2 chars) are
+  default. It also drove two per-span guards: short non-all-caps spans (≤2 chars) are
   excluded from both CAPS and the clause (CAPS read `*it*` as the acronym "eye-tee"), and
   already-uppercase spans skip the no-op transform but keep the clause.
 - SoulX's stress tokens proved not inert: the same audition heard them vocalize as
