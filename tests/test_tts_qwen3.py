@@ -215,6 +215,31 @@ class TestQwen3Engine:
             "excited, racing ahead. Put strong emphasis on the word 'whole'."
         )
 
+    def test_emphasis_clause_after_terminal_punctuated_delivery_adds_no_extra_period(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _install_fakes(monkeypatch, cuda_available=True)
+        engine = qwen3.Qwen3Engine(AppConfig())
+        engine.synthesize_line(
+            "That's the *whole* point",
+            "Ryan",
+            tmp_path / "x.wav",
+            delivery="Speak at a fast, energetic pace.",
+        )
+        assert _FakeModel.generate_calls[0]["instruct"] == (
+            "Speak at a fast, energetic pace. Put strong emphasis on the word 'whole'."
+        )
+
+    def test_emphasis_clause_names_repeated_span_once(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _install_fakes(monkeypatch, cuda_available=True)
+        engine = qwen3.Qwen3Engine(AppConfig())
+        engine.synthesize_line("*big*, really *big*", "Ryan", tmp_path / "x.wav")
+        call = _FakeModel.generate_calls[0]
+        assert call["text"] == "BIG, really BIG"
+        assert call["instruct"] == "Put strong emphasis on the word 'big'."
+
     def test_emphasis_clause_names_multiple_spans_in_original_form(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

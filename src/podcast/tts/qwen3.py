@@ -51,12 +51,12 @@ EMPHASIS_CLAUSE_TEMPLATE = "Put strong emphasis on the {noun} {names}."
 
 
 def _emphasis_clause(span_texts: Sequence[str]) -> str:
-    """Instruct clause naming the stressed spans as written; empty when there are none."""
+    """Instruct clause naming each distinct stressed span as written; empty when none."""
     if not span_texts:
         return ""
-    *head, last = (f"'{span}'" for span in span_texts)
+    *head, last = (f"'{span}'" for span in dict.fromkeys(span_texts))
     names = f"{', '.join(head)} and {last}" if head else last
-    return EMPHASIS_CLAUSE_TEMPLATE.format(noun="word" if not head else "words", names=names)
+    return EMPHASIS_CLAUSE_TEMPLATE.format(noun="words" if head else "word", names=names)
 
 
 class Qwen3Engine:
@@ -116,7 +116,11 @@ class Qwen3Engine:
     def synthesize_line(self, text: str, voice: str, out_path: Path, *, delivery: str = "") -> None:
         model = self._load()
         clause = _emphasis_clause(emphasis.spans(text))
-        instruct = ". ".join(part for part in (delivery.strip(), clause) if part)
+        note = delivery.strip()
+        if clause and note.endswith((".", "!", "?")):
+            instruct = f"{note} {clause}"
+        else:
+            instruct = ". ".join(part for part in (note, clause) if part)
         try:
             wavs, sample_rate = model.generate_custom_voice(
                 text=emphasis.render_caps(text),
