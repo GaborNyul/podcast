@@ -372,6 +372,8 @@ def ensure_length(
         ),
     ]
     repaired_turns = _dialogue_request(provider, config, messages, transcript.hosts)
+    if not repaired_turns:
+        return transcript
     repaired = transcript.model_copy(update={"turns": repaired_turns})
     if abs(repaired.word_count() - budget_words) < abs(actual - budget_words):
         return repaired

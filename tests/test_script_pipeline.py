@@ -207,8 +207,11 @@ class TestWriteDialogue:
         """Emptiness is judged on the normalized text, so `*` alone is no dialogue."""
         config = AppConfig()
         outline = Outline(title="T", segments=[OutlineSegment(heading="only", target_words=60)])
-        reply = json.dumps({"turns": [{"speaker": "Alex", "text": "*"}]})
-        provider = _ScriptedProvider([reply])
+        turns = [
+            {"speaker": "Alex", "text": "*"},
+            {"speaker": "Maya", "text": "* *"},
+        ]
+        provider = _ScriptedProvider([json.dumps({"turns": turns})])
         with pytest.raises(ScriptError, match="produced no dialogue"):
             pipeline.write_dialogue(provider, config, SOURCES, outline)
 
@@ -261,6 +264,13 @@ class TestPolishDialogue:
         provider = _ScriptedProvider([json.dumps({"turns": polished})])
         result = pipeline.polish_dialogue(provider, AppConfig(), self._transcript())
         assert result.turns[0].text == "keep *this* but not that"
+
+    def test_polish_reply_of_only_stray_asterisks_keeps_the_original(self) -> None:
+        """A reply whose turns all normalize to blank is empty → polish falls back."""
+        polished = [{"speaker": "Maya", "text": " ** "}]
+        provider = _ScriptedProvider([json.dumps({"turns": polished})])
+        transcript = self._transcript()
+        assert pipeline.polish_dialogue(provider, AppConfig(), transcript) is transcript
 
     def test_disabled_polish_pass_skips_the_llm(self) -> None:
         config = AppConfig()
@@ -324,8 +334,18 @@ class TestEnsureLength:
         repaired_turns = [{"speaker": "Maya", "text": "word " * 100}]
         provider = _ScriptedProvider([json.dumps({"turns": repaired_turns})])
         pipeline.ensure_length(provider, AppConfig(), transcript, 100)
-        assert "*word*" in provider.prompts[0]  # stress marks are spoken text, counted
-        assert "stress marks" in provider.prompts[0]
+        assert "stress marks are spoken text" in provider.prompts[0]
+
+    def test_repair_reply_of_only_stray_asterisks_keeps_the_original(self) -> None:
+        """An empty-after-normalize repair must never beat the real script."""
+        transcript = self._transcript(250)
+        repaired_turns = [
+            {"speaker": "Maya", "text": "*"},
+            {"speaker": "Alex", "text": " ** "},
+        ]
+        provider = _ScriptedProvider([json.dumps({"turns": repaired_turns})])
+        result = pipeline.ensure_length(provider, AppConfig(), transcript, 100)
+        assert result is transcript
 
     def test_worse_repair_is_discarded(self) -> None:
         transcript = self._transcript(80)
