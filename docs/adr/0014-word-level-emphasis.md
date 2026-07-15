@@ -1,0 +1,63 @@
+# ADR 0014: Word-level emphasis markup (`*word*`) with per-engine rendering
+
+Date: 2026-07-15
+Status: Accepted
+
+## Context
+
+Line-level delivery notes (ADR 0010) set the register for a whole utterance, but a human
+host leans on individual words; that stress is what makes a reveal land. A capability survey
+(verified against engine source code, model cards, and maintainer statements) found no
+cross-engine markup standard: none of qwen3, SoulX, kokoro-onnx, VibeVoice, or Chatterbox
+supports SSML, and a published benchmark (arXiv 2508.17494) shows LLMs systematically
+mangle SSML anyway. What does exist: markdown asterisks are native LLM output; CAPS on the
+stressed word is the closest de-facto render-side convention (ElevenLabs guidance, Bark,
+Chatterbox); qwen3's `instruct` channel accepts a clause naming the word (probabilistic);
+and SoulX's released tokenizer ships undocumented `<|stress_start|>`/`<|stress_end|>`
+single-ID added tokens — worst case a prosodic no-op, never spoken text. Raw unknown markup
+reaching SoulX *is* spoken aloud, so markup must never pass through unrendered.
+
+## Decision
+
+- The script layer marks stress inline in spoken text: `*word*` — single asterisks, a
+  non-empty span with no `*` inside and no leading/trailing whitespace inside. The shared
+  FORMAT FOR AUDIO prompt block carves this out as the single exception to the no-markdown
+  rule and directs the LLM to use it sparingly (a word or two, only where a host would lean
+  on it). Markup lives inside `Turn.text`: no model or artifact-schema change, and the
+  span attaches to its word so `word_count()` and the `**Host:**` line grammar are
+  unaffected.
+- Trust boundaries differ: LLM output is normalized tolerantly (`emphasis.normalize`
+  drops malformed or stray asterisks in `_dialogue_request`, covering generate, polish, and
+  length-repair); hand-edited script.md is validated strictly (malformed emphasis raises
+  `ScriptError` with the line number, like every other grammar violation).
+- The polish pass may keep, sharpen, sparingly add, or move emphasis marks — the same
+  mandate it has for delivery notes; the length-repair prompt keeps marks through rewrites.
+- `EngineInfo` gains `supports_emphasis`; the CLI strips markup before caching and
+  synthesis for engines that declare `False` (mirroring the ADR 0010 delivery pattern), so
+  emphasis edits are cache-free on kokoro and re-render exactly the affected lines on
+  supporting engines. Engines only ever see markup they declared support for.
+- qwen3 renders a span as CAPS in the text plus an appended instruct clause naming the
+  word ("Put strong emphasis on the word 'X'.") — best-effort by design (~35–50%
+  correct-word hit rate in published fine-grained instruct benchmarks).
+- SoulX renders a span as `<|stress_start|>span<|stress_end|>`, gated by the layered
+  config flag `tts.soulx_stress_markup` (default on). The flag feeds
+  `supports_emphasis`, so turning it off routes through the CLI strip path — cache
+  invalidation stays correct with no new key component.
+- Pacing heuristics (ADR 0011) read markup-stripped text so a trailing `*` never masks
+  the interruption/backchannel/question detection.
+
+## Consequences
+
+- Scripts gain a hand-editable stress channel that degrades gracefully: unsupported
+  engines get clean text, supporting engines get their native best effort.
+- The deep-dive system prompt bytes changed: the SHA-256 pin and shared-block assertions
+  in `tests/test_formats.py` were updated deliberately; all four formats inherit the rule
+  via the shared `AUDIO_BLOCK`.
+- Cache keys did not gain a field; only lines whose rendered input actually changes
+  re-render.
+- qwen3 emphasis is probabilistic, not guaranteed — an A/B listening check (plain vs CAPS
+  vs instruct vs both) validates the default; SoulX's stress tokens are undocumented
+  upstream and may prove inert, in which case the flag turns the feature off without a
+  code change.
+- Future engines (VibeVoice, Chatterbox) slot in by declaring their capability and, if
+  supported, their own renderer (Chatterbox: CAPS; VibeVoice: strip).
