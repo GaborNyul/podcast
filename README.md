@@ -39,7 +39,8 @@ uv run podcast doctor   # verify ffmpeg, workspace, and the configured engine
 uv run podcast generate paper.pdf notes.md -d 15
 
 # 2. Open episodes/<slug>/script.md, tweak any lines you like — including the
-#    [delivery notes] that steer tone and pace on the qwen3 engine
+#    [delivery notes] that steer tone and pace on the qwen3 engine, and *word*
+#    stress marks (single asterisks; a literal * cannot be written — ADR 0014)
 
 # 3. Render the audio (only edited lines are re-synthesized on re-runs)
 uv run podcast synthesize
@@ -101,6 +102,7 @@ tempo = 1.1                                 # pitch-preserving speed-up of this 
 [tts]
 engine = "qwen3"                           # qwen3 (GPU) | kokoro (CPU) | soulx (GPU, dialogue-native)
 qwen3_temperature = 0.8                    # sampling; lower reads robotic (ADR 0011)
+soulx_stress_markup = true                 # render *word* stress as SoulX tokens; off = strip (ADR 0014)
 [tts.voices]                               # optional per-speaker voice overrides
                                            # (engine-specific ids — swap when switching engines)
 Alex = "Ryan"
