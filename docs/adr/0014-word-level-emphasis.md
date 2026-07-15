@@ -61,3 +61,9 @@ reaching SoulX *is* spoken aloud, so markup must never pass through unrendered.
   code change.
 - Future engines (VibeVoice, Chatterbox) slot in by declaring their capability and, if
   supported, their own renderer (Chatterbox: CAPS; VibeVoice: strip).
+- The grammar reserves `*` outright: spoken text cannot carry a literal asterisk — the
+  parser rejects hand-edited math like `3*4` with an instructive error, and the LLM
+  boundary silently drops it. Two same-line asterisks may also legally pair into an
+  arbitrarily long multi-word span (`3*4=12 and 4*3=12` parses as one span covering
+  `4=12 and 4`); the sparing-use prompt guidance is the guardrail, and a parse-time
+  warning on implausibly long spans is a possible refinement if hand edits ever hit this.
