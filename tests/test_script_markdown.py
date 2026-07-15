@@ -4,6 +4,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
+from podcast import emphasis
 from podcast.errors import ScriptError
 from podcast.script.markdown import (
     markdown_to_transcript,
@@ -16,7 +17,19 @@ from podcast.script.models import Transcript, Turn
 
 _HOSTS = ["Alex", "Maya"]
 
-_turn_text = st.text(min_size=0, max_size=200).map(normalize_turn_text)
+
+def _canonical_turn_text(value: str) -> str:
+    """The write-side canonical form: emphasis-normalize first, then whitespace-collapse."""
+    return normalize_turn_text(emphasis.normalize(value))
+
+
+# General text plus a star-dense alphabet so emphasis markup (valid and malformed)
+# is generated often.
+_raw_turn_texts = st.one_of(
+    st.text(min_size=0, max_size=200),
+    st.text(alphabet=st.sampled_from(list("*ab c!\n")), max_size=40),
+)
+_turn_text = _raw_turn_texts.map(_canonical_turn_text)
 _deliveries = st.text(min_size=0, max_size=60).map(normalize_delivery)
 _titles = st.text(min_size=1, max_size=80).filter(lambda value: value.strip() != "")
 
@@ -49,13 +62,26 @@ class TestRoundTrip:
         again = transcript_to_markdown(markdown_to_transcript(once))
         assert once == again
 
+    @given(text=_raw_turn_texts)
+    def test_round_trip_is_total_for_arbitrary_turn_text(self, text: str) -> None:
+        """Serialize-then-parse never raises; the text lands in the canonical form."""
+        transcript = Transcript(title="T", hosts=_HOSTS, turns=[Turn(speaker="Alex", text=text)])
+        parsed = markdown_to_transcript(transcript_to_markdown(transcript))
+        assert parsed.turns[0].text == _canonical_turn_text(text)
+
     def test_unicode_title_and_text_survive(self) -> None:
         transcript = Transcript(
             title='Űrhajó: a "nagy" kaland 🚀',
             hosts=_HOSTS,
             turns=[Turn(speaker="Maya", text="Szia! **bold** [link] `code`")],
         )
-        assert markdown_to_transcript(transcript_to_markdown(transcript)) == transcript
+        parsed = markdown_to_transcript(transcript_to_markdown(transcript))
+        # `**bold**` is not the emphasis grammar (ADR 0014): write-side
+        # canonicalization keeps the inner `*bold*` span and drops the stray
+        # outer asterisks; from then on the round-trip is byte-stable.
+        assert parsed.title == transcript.title
+        assert parsed.turns[0].text == "Szia! *bold* [link] `code`"
+        assert markdown_to_transcript(transcript_to_markdown(parsed)) == parsed
 
 
 class TestTranscriptToMarkdown:
@@ -101,6 +127,10 @@ class TestTurnToLine:
     def test_grammar_breaking_characters_are_dropped_from_delivery(self) -> None:
         line = turn_to_line(Turn(speaker="Alex", text="Hi.", delivery="wry: [aside] beat"))
         assert line == "**Alex [wry aside beat]:** Hi."
+
+    def test_stray_asterisks_are_dropped_and_valid_spans_kept(self) -> None:
+        line = turn_to_line(Turn(speaker="Alex", text="keep *this*, drop ** and * strays"))
+        assert line == "**Alex:** keep *this*, drop and strays"
 
 
 class TestMarkdownToTranscript:
@@ -158,6 +188,22 @@ class TestMarkdownToTranscript:
         )
         transcript = markdown_to_transcript(text)
         assert transcript.turns[0].text == "I rewrote this line by hand!"
+
+    def test_valid_emphasis_is_preserved_in_turn_text(self) -> None:
+        text = (
+            '---\ntitle: "T"\nhosts: ["Alex", "Maya"]\n---\n\n'
+            "**Alex:** the *whole point*, not a footnote\n"
+        )
+        assert markdown_to_transcript(text).turns[0].text == "the *whole point*, not a footnote"
+
+    @pytest.mark.parametrize(
+        "bad_text",
+        ["so **bold** wrong", "a stray * here", "a * padded * span"],
+    )
+    def test_malformed_emphasis_raises_with_line_number(self, bad_text: str) -> None:
+        text = f'---\ntitle: "T"\nhosts: ["Alex", "Maya"]\n---\n\n**Alex:** {bad_text}\n'
+        with pytest.raises(ScriptError, match="line 6.*emphasis"):
+            markdown_to_transcript(text)
 
     def test_delivery_note_is_parsed_from_speaker_token(self) -> None:
         text = (
