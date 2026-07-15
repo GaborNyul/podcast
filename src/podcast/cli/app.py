@@ -9,7 +9,7 @@ import typer
 from rich.progress import Progress
 from rich.table import Table
 
-from podcast import __version__, doctor
+from podcast import __version__, doctor, emphasis
 from podcast.audio import pacing
 from podcast.audio.assemble import assemble_episode, tempo_variant
 from podcast.cli import ui
@@ -200,13 +200,14 @@ def _dialogue_segments(
     spoken: list[Turn],
     voices: dict[str, str],
     composed: Callable[[Turn], str],
+    spoken_text: Callable[[Turn], str],
     stats: CacheStats,
     progress: Progress,
 ) -> list[Path]:
     """Whole-conversation render: any line change re-renders the dialogue, since
     every line's prosody depends on the lines before it."""
     lines = [
-        DialogueLine(speaker=turn.speaker, text=turn.text, delivery=composed(turn))
+        DialogueLine(speaker=turn.speaker, text=spoken_text(turn), delivery=composed(turn))
         for turn in spoken
     ]
     digest = hashlib.sha256()
@@ -240,6 +241,7 @@ def _run_synthesize(config: AppConfig, workspace: Workspace, progress: Progress)
     stats = CacheStats()
     spoken = [turn for turn in transcript.turns if turn.text.strip()]
     supports_delivery = engine.info().supports_delivery
+    supports_emphasis = engine.info().supports_emphasis
     styles = {host.name: host.style for host in config.script.hosts}
     tempos = {host.name: host.tempo for host in config.script.hosts}
 
@@ -248,25 +250,31 @@ def _run_synthesize(config: AppConfig, workspace: Workspace, progress: Progress)
             return ""
         return "; ".join(part for part in (styles.get(turn.speaker, ""), turn.delivery) if part)
 
+    def spoken_text(turn: Turn) -> str:
+        if not supports_emphasis:
+            return emphasis.strip_markup(turn.text)
+        return turn.text
+
     rendered_paths: list[Path] = []
     if engine.info().dialogue_native and isinstance(engine, DialogueEngine):
         rendered_paths = _dialogue_segments(
-            engine, workspace, spoken, voices, composed, stats, progress
+            engine, workspace, spoken, voices, composed, spoken_text, stats, progress
         )
     else:
         task = progress.add_task("Synthesizing lines", total=len(spoken))
         for turn in spoken:
             voice = voices[turn.speaker]
             delivery = composed(turn)
+            line_text = spoken_text(turn)
 
             def render(
-                path: Path, text: str = turn.text, voice_id: str = voice, note: str = delivery
+                path: Path, text: str = line_text, voice_id: str = voice, note: str = delivery
             ) -> None:
                 engine.synthesize_line(text, voice_id, path, delivery=note)
 
             rendered_paths.append(
                 ensure_segment(
-                    workspace.segments_dir, engine.name, voice, turn.text, delivery, render, stats
+                    workspace.segments_dir, engine.name, voice, line_text, delivery, render, stats
                 )
             )
             progress.advance(task)

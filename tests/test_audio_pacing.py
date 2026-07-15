@@ -50,3 +50,19 @@ class TestGapScales:
     def test_one_scale_per_gap(self) -> None:
         turns = [_turn("First?"), _turn(LONG_REPLY), _turn("Totally.")]
         assert pacing.gap_scales(turns) == [pacing.HANDOFF_SCALE, pacing.BACKCHANNEL_SCALE]
+
+    def test_trailing_emphasis_does_not_mask_interruption(self) -> None:
+        # Raw text ends with `*` (ADR 0014 markup), but the spoken line ends with a dash.
+        assert pacing.gap_scales([_turn("so if we *cave—*"), _turn(LONG_REPLY)]) == [
+            pacing.INTERRUPT_SCALE
+        ]
+
+    def test_trailing_emphasis_does_not_mask_question_handoff(self) -> None:
+        assert pacing.gap_scales([_turn("But who pays for *that?*"), _turn(LONG_REPLY)]) == [
+            pacing.HANDOFF_SCALE
+        ]
+
+    def test_trailing_emphasis_does_not_mask_ellipsis_beat(self) -> None:
+        assert pacing.gap_scales([_turn("Okay, get *this...*"), _turn(LONG_REPLY)]) == [
+            pacing.BEAT_SCALE
+        ]

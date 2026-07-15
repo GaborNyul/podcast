@@ -93,6 +93,7 @@ class TestKokoroEngine:
         assert info.sample_rate == kokoro.SAMPLE_RATE
         assert info.dialogue_native is False
         assert info.supports_delivery is False
+        assert info.supports_emphasis is False
 
     @pytest.mark.usefixtures("fake_runtime_module")
     def test_synthesize_line_writes_wav(self, tmp_path: Path) -> None:
