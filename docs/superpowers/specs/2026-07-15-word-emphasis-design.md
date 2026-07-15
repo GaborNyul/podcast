@@ -34,7 +34,8 @@ render convention (ElevenLabs, Bark). Conclusion: mark in markdown, render per e
    attach to words, so `word_count()` and the `**Host:**` line grammar are unaffected; no
    model/schema change.
 2. **SoulX**: try the undocumented stress tokens, behind layered config flag
-   `tts.soulx_stress_markup` (default on); flag feeds `EngineInfo.supports_emphasis`, so
+   `tts.soulx_stress_markup` (default on at design time; revised to off post-audition —
+   see Postscript); flag feeds `EngineInfo.supports_emphasis`, so
    off ⇒ CLI strips (correct cache behavior for free).
 3. **Polish pass**: may preserve **and sharpen** — keep existing marks, sparingly add or
    move them where the register moves (same mandate as delivery notes).

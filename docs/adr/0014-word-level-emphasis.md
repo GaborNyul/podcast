@@ -14,8 +14,10 @@ mangle SSML anyway. What does exist: markdown asterisks are native LLM output; C
 stressed word is the closest de-facto render-side convention (ElevenLabs guidance, Bark,
 Chatterbox); qwen3's `instruct` channel accepts a clause naming the word (probabilistic);
 and SoulX's released tokenizer ships undocumented `<|stress_start|>`/`<|stress_end|>`
-single-ID added tokens — worst case a prosodic no-op, never spoken text. Raw unknown markup
-reaching SoulX *is* spoken aloud, so markup must never pass through unrendered.
+single-ID added tokens — believed at decision time to be worst-case a prosodic no-op,
+never spoken text (the hardware audition later disproved this; see Consequences). Raw
+unknown markup reaching SoulX *is* spoken aloud, so markup must never pass through
+unrendered.
 
 ## Decision
 

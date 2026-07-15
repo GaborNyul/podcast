@@ -129,8 +129,10 @@ class Qwen3Engine:
     def synthesize_line(self, text: str, voice: str, out_path: Path, *, delivery: str = "") -> None:
         model = self._load()
         treated = [span for span in emphasis.spans(text) if _treated(span)]
-        # With no treated span this stays byte-identical to the unmarked path:
-        # the clause is empty, so instruct is the delivery note alone or None.
+        # With no treated span this stays byte-identical to the unmarked path —
+        # the text renders to its markup-stripped form (exactly the text an
+        # unmarked script would carry) and the clause is empty, so instruct is
+        # the delivery note alone or None.
         clause = _emphasis_clause(treated)
         note = delivery.strip()
         if clause and note.endswith((".", "!", "?")):
