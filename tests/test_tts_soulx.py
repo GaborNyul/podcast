@@ -150,6 +150,12 @@ class TestTaggedText:
         line = DialogueLine(speaker="A", text="first\n*second*  line")
         assert soulx.tagged_text(line) == "first <|stress_start|>second<|stress_end|> line"
 
+    def test_markup_only_text_raises_instead_of_speaking_an_asterisk(self) -> None:
+        # Contract-unreachable (the pipeline drops strays before engines), but pin
+        # the post-render semantics: a lone "*" renders to nothing and fails loudly.
+        with pytest.raises(TTSError, match="empty line"):
+            soulx.tagged_text(DialogueLine(speaker="A", text="*"))
+
     def test_markup_free_text_never_gains_stress_tokens(self) -> None:
         # Flag-off contract: the CLI pre-strips markup, so the renderer must be
         # the identity on markup-free text — no stress tokens minted.
