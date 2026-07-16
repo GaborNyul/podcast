@@ -33,6 +33,12 @@ class TestMainOptions:
         assert result.exit_code == 0
         assert f"podcast {__version__}" in result.output
 
+    def test_version_flag_shows_license_and_source(self) -> None:
+        result = runner.invoke(app_mod.app, ["--version"])
+        assert result.exit_code == 0
+        assert "AGPL-3.0-or-later" in result.output
+        assert "github.com/gabornyul/podcast" in result.output
+
     def test_no_arguments_shows_help(self) -> None:
         result = runner.invoke(app_mod.app, [])
         assert result.exit_code == 0

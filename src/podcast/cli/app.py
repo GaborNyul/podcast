@@ -9,7 +9,7 @@ import typer
 from rich.progress import Progress
 from rich.table import Table
 
-from podcast import __version__, doctor
+from podcast import LICENSE, SOURCE_URL, __version__, doctor
 from podcast.audio import pacing
 from podcast.audio.assemble import assemble_episode, tempo_variant
 from podcast.cli import ui
@@ -53,6 +53,7 @@ def main_options(
     """Global options."""
     if version:
         ui.out.print(f"podcast {__version__}")
+        ui.out.print(f"{LICENSE} · {SOURCE_URL}")
         raise typer.Exit()
     if ctx.invoked_subcommand is None:
         ui.out.print(ctx.get_help())
