@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Gabor Nyul
 """Load source files into labeled markdown documents."""
 
 from collections.abc import Sequence

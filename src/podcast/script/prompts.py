@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Gabor Nyul
 """Prompt text for the generate stage: the NotebookLM-style "Deep Dive" engine.
 
 Provenance and the outline/per-segment split of its episode-level rules: ADR 0009.

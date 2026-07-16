@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Gabor Nyul
 """Real-model integration tests (nightly CI / the Strix Halo box; never the default run).
 
 The qwen3 test doubles as the RTF benchmark from the design spec: run it on the

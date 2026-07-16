@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Gabor Nyul
 """Outline → per-segment dialogue → length repair (the generate stage).
 
 Every stage reads its prompts and episode shape from the FormatSpec resolved

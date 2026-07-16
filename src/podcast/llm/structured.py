@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Gabor Nyul
 """Schema-guided completion: native enforcement when supported, prompt+retry fallback."""
 
 import json

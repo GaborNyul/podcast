@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Gabor Nyul
 """Transcript ⇄ script.md, the lossless contract between generate and synthesize.
 
 Format: a front-matter block with JSON-encoded values, then exactly one line per

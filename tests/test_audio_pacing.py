@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Gabor Nyul
 """Tests for podcast.audio.pacing (content-aware inter-turn pause scales)."""
 
 from podcast.audio import pacing

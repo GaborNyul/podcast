@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Gabor Nyul
 """Claude provider via the official Anthropic SDK."""
 
 from collections.abc import Mapping, Sequence

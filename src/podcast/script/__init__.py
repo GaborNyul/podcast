@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Gabor Nyul
 """Script generation: outline → dialogue → length repair."""
 
 from podcast.script.models import DialogueChunk, Outline, OutlineSegment, Transcript, Turn

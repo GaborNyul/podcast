@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Gabor Nyul
 """Pre-implementation gate: verify a clean baseline before starting a ticket."""
 
 import argparse

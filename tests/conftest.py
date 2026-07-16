@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Gabor Nyul
 """Shared fixtures; also makes the standalone gate scripts importable."""
 
 import os
