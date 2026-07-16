@@ -279,8 +279,9 @@ class TestQwen3Engine:
     def test_short_lowercase_span_gets_no_treatment(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        # 2026-07-15 audition: CAPS turned 'it' into the acronym "eye-tee", and the
-        # clause-only arm over-emphasized — a short lowercase span is left alone.
+        # 2026-07-15 audition: CAPS turned 'it' into the acronym "eye-tee", and
+        # clause-alone landed the target word 0-for-5 across both audition rounds
+        # (MANIFEST.md / ADR 0014) — so a short lowercase span is left alone.
         _install_fakes(monkeypatch, cuda_available=True)
         engine = qwen3.Qwen3Engine(AppConfig())
         engine.synthesize_line(
@@ -383,7 +384,7 @@ class TestQwen3Engine:
         assert call["text"] == "the TWO WORDS stand"
         assert call["instruct"] == "Put strong emphasis on the word 'two words'."
 
-    def test_mixed_line_treats_only_clause_eligible_spans(
+    def test_mixed_line_treats_only_spans_caps_can_change(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         _install_fakes(monkeypatch, cuda_available=True)

@@ -40,7 +40,8 @@ uv run podcast generate paper.pdf notes.md -d 15
 
 # 2. Open episodes/<slug>/script.md, tweak any lines you like — including the
 #    [delivery notes] that steer tone and pace on the qwen3 engine, and *word*
-#    stress marks (single asterisks; a literal * cannot be written — ADR 0014)
+#    stress marks (single asterisks; a literal * cannot be written — ADR 0014;
+#    stress numbers written out as words: *forty*, not *40*)
 
 # 3. Render the audio (only edited lines are re-synthesized on re-runs)
 uv run podcast synthesize

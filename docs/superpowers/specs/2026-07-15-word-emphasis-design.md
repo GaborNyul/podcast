@@ -55,8 +55,11 @@ LLM (FORMAT FOR AUDIO teaches *word*, shared AUDIO_BLOCK → all 4 formats)
                               delivery blanking; applies to per-line + dialogue paths)
   → engine renderer           qwen3: render_caps + instruct clause
                               soulx: <|stress_start|>span<|stress_end|> in tagged_text
-  → segment cache             keys on the text handed over ⇒ emphasis edits re-render
-                              only where they audibly matter
+  → segment cache             keys on the engine-visible text ⇒ on a supporting engine
+                              any emphasis edit re-renders that line (conservative
+                              over-invalidation: never stale audio, occasionally a
+                              redundant render); non-supporting engines key the
+                              stripped text, so emphasis edits stay cache-free
 ```
 
 New module `src/podcast/emphasis.py` (stdlib-only, importable from script and tts layers):

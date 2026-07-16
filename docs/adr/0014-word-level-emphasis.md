@@ -55,8 +55,12 @@ unrendered.
 - The deep-dive system prompt bytes changed: the SHA-256 pin and shared-block assertions
   in `tests/test_formats.py` were updated deliberately; all four formats inherit the rule
   via the shared `AUDIO_BLOCK`.
-- Cache keys did not gain a field; only lines whose rendered input actually changes
-  re-render.
+- Cache keys did not gain a field; the cache keys on the engine-visible text. On a
+  supporting engine the marked text itself is engine-visible, so any emphasis edit
+  re-renders that line — even one whose final engine payload is unchanged (e.g. adding an
+  untreated span like `*100*`). Conservative over-invalidation: never stale audio,
+  occasionally a redundant render. On non-supporting engines markup is stripped before
+  keying, so emphasis edits stay cache-free.
 - qwen3 emphasis is probabilistic, not guaranteed — the A/B listening check (plain vs CAPS
   vs instruct vs both) ran on hardware 2026-07-15 in two rounds and confirmed
   CAPS+instruct as the default. It also drove a per-span guard: treatment applies exactly

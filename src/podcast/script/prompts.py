@@ -96,8 +96,9 @@ sound-effect notes, and no markdown or list notation inside spoken lines. If it 
 spoken aloud, it does not belong in the script — with exactly one exception: *word* in
 single asterisks marks the word a host leans on. Use it sparingly, a marked word or two
 every few sentences at most, and only where a human host would genuinely stress that word —
-a reveal, a contrast, a number that matters: "And the entire fix was... *one* line of
-code." Most lines carry no mark at all. Stress stays inline as *word* and never migrates
+a reveal, a contrast, a number that matters (write a stressed number out as words: *forty*
+percent, not *40*%): "And the entire fix was... *one* line of code." Most lines carry no
+mark at all. Stress stays inline as *word* and never migrates
 or duplicates into the delivery note; direction for how a whole line should be performed
 goes in the turn's separate "delivery" field instead: a short English performance note for
 the voice engine — three to eight words naming tone, pace, or emotional register, like

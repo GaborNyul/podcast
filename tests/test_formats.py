@@ -9,11 +9,12 @@ from podcast.script import formats, prompts
 
 # The validated hybrid-v2 deep-dive prompt (ADR 0009), amended deliberately by
 # ADR 0014 (the *word* emphasis carve-out in FORMAT FOR AUDIO and the polish
-# mandate). If this pin fails, the prompt's bytes changed — that must be a
-# deliberate, ADR-backed decision.
+# mandate, plus the stressed-numbers-as-words steer — digit spans are
+# untreatable on qwen3). If this pin fails, the prompt's bytes changed — that
+# must be a deliberate, ADR-backed decision.
 _DEEP_DIVE_SHA256 = (
-    "91aaea6fe97c735bbe4c386c722749bd"  # pragma: allowlist secret — prompt hash pin
-    "a840eb3a4671d04b52ab5a0590f4a2ff"  # pragma: allowlist secret
+    "f2a04a5efb0e9b94de7e81c1c994c474"  # pragma: allowlist secret — prompt hash pin
+    "f62f2aa171bff71d84753526079937a3"  # pragma: allowlist secret
 )
 
 
@@ -89,6 +90,9 @@ class TestSharedInvariants:
         assert "Use it sparingly" in flat
         assert "Most lines carry no mark at all." in flat
         assert '"And the entire fix was... *one* line of code."' in flat
+        # digit spans are untreatable on qwen3 (CAPS cannot change '40'), so
+        # the prompt steers stressed numbers to their worded form
+        assert "(write a stressed number out as words: *forty* percent, not *40*%)" in flat
         # channel split: word-level stress stays inline, line-level register
         # goes in the delivery field — never duplicated across the two
         assert "Stress stays inline as *word*" in flat

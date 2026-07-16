@@ -53,7 +53,7 @@ Replace the qwen3-minted references with voices cloned from real NotebookLM audi
 4. Check the licensing/ToS question of cloning NotebookLM's voices before shipping
    anything beyond local experiments.
 
-## 4. Sweep qwen3_temperature for naturalness (sampling variance dwarfs treatment effects)
+## 5. Sweep qwen3_temperature for naturalness (sampling variance dwarfs treatment effects)
 
 The 2026-07-15 emphasis audition (ADR 0014, `scratchpad/emphasis-ab/MANIFEST.md`) found
 that two clips rendered from *byte-identical* inputs (S3-plain vs S3-both-v2: same text,
