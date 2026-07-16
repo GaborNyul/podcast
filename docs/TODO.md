@@ -2,12 +2,6 @@
 
 Planned follow-up work; items move into ADRs/specs when they start.
 
-## 0. Define source code licensing (MIT, GNU, etc.)
-
-The repository is public but has no license, which legally means all rights reserved.
-Pick a license (MIT, Apache-2.0, GPL, ...), add a `LICENSE` file at the repo root, and
-reference it from `README.md` and the project metadata in `pyproject.toml`.
-
 ## 1. Per-format default minutes configurable from podcast.toml
 
 Each format's default length (`FormatSpec.default_minutes`: brief 2, debate 7, critique 9;
