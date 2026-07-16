@@ -9,11 +9,14 @@ import pytest
 from podcast.errors import ConfigError
 from podcast.script import formats, prompts
 
-# The validated hybrid-v2 deep-dive prompt (ADR 0009). If this pin fails, the
-# prompt's bytes changed — that must be a deliberate, bakeoff-backed decision.
+# The validated hybrid-v2 deep-dive prompt (ADR 0009), amended deliberately by
+# ADR 0014 (the *word* emphasis carve-out in FORMAT FOR AUDIO and the polish
+# mandate, plus the stressed-numbers-as-words steer — digit spans are
+# untreatable on qwen3). If this pin fails, the prompt's bytes changed — that
+# must be a deliberate, ADR-backed decision.
 _DEEP_DIVE_SHA256 = (
-    "90040487f5c247f3b5ac7f4fcbbcd3ad"  # pragma: allowlist secret — prompt hash pin
-    "66734882659bdc0a21c21c1705d25220"  # pragma: allowlist secret
+    "f2a04a5efb0e9b94de7e81c1c994c474"  # pragma: allowlist secret — prompt hash pin
+    "f62f2aa171bff71d84753526079937a3"  # pragma: allowlist secret
 )
 
 
@@ -72,6 +75,40 @@ class TestSharedInvariants:
         prompt = formats.FORMATS[key].system_prompt
         assert formats.AUDIO_BLOCK in prompt  # bans [laughs]-style cues, defines delivery
         assert "no bracketed cues like [laughs]" in prompt
+
+    def test_emphasis_is_the_single_exception_in_the_audio_block(self) -> None:
+        # ADR 0014: *word* stress markup is the one carve-out from the
+        # no-markdown rule — sparing, with the form shown once. It lives in the
+        # shared AUDIO_BLOCK, so test_audio_rules_are_shared_verbatim carries
+        # it into all four formats' system prompts.
+        flat = " ".join(formats.AUDIO_BLOCK.split())
+        assert "no markdown or list notation inside spoken lines" in flat
+        assert "with exactly one exception: *word* in single asterisks" in flat
+        assert flat.count("exception:") == 1  # "single exception" is executable
+        # the ban-summary maxim precedes the carve-out: the exception amends
+        # the rule instead of being contradicted by it
+        maxim = flat.index("If it cannot be spoken aloud")
+        assert maxim < flat.index("with exactly one exception")
+        assert "Use it sparingly" in flat
+        assert "Most lines carry no mark at all." in flat
+        assert '"And the entire fix was... *one* line of code."' in flat
+        # digit spans are untreatable on qwen3 (CAPS cannot change '40'), so
+        # the prompt steers stressed numbers to their worded form
+        assert "(write a stressed number out as words: *forty* percent, not *40*%)" in flat
+        # channel split: word-level stress stays inline, line-level register
+        # goes in the delivery field — never duplicated across the two
+        assert "Stress stays inline as *word*" in flat
+        assert "never migrates or duplicates into the delivery note" in flat
+
+    @pytest.mark.parametrize("key", list(formats.FORMATS))
+    def test_every_polish_brief_carries_the_emphasis_mandate(self, key: str) -> None:
+        # ADR 0014: polish keeps/sharpens/moves *word* marks and adds only
+        # sparingly — the same mandate it already has for delivery notes.
+        brief = formats.FORMATS[key].polish_brief
+        assert "*word*" in brief
+        assert "keep the ones that" in brief
+        assert "a misplaced one" in brief
+        assert "never inflate" in brief
 
     @pytest.mark.parametrize("key", list(formats.FORMATS))
     def test_listener_and_grounding_are_shared(self, key: str) -> None:

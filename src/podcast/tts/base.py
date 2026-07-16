@@ -26,6 +26,7 @@ class EngineInfo:
     sample_rate: int
     dialogue_native: bool = False
     supports_delivery: bool = False
+    supports_emphasis: bool = False
 
 
 @runtime_checkable
@@ -41,6 +42,9 @@ class TTSEngine(Protocol):
 
         `delivery` is a short performance note (tone, pace, emotional register);
         engines that cannot act on it declare `supports_delivery=False` and ignore it.
+        `text` carries `*word*` emphasis markup (ADR 0014) only when the engine
+        declares `supports_emphasis=True`; engines that declare `False` always
+        receive markup-free text (the CLI strips it), so they need no handling.
         """
         ...
 
@@ -57,7 +61,12 @@ class DialogueEngine(Protocol):
         self, lines: Sequence[DialogueLine], voices: dict[str, str], out_paths: Sequence[Path]
     ) -> None:
         """Render the whole conversation, one WAV per line at `out_paths[i]`;
-        prosody on every line may depend on all preceding lines."""
+        prosody on every line may depend on all preceding lines.
+
+        Each line's `text` carries `*word*` emphasis markup (ADR 0014) only when
+        the engine declares `supports_emphasis=True`; engines that declare `False`
+        always receive markup-free text (the CLI strips it), so they need no handling.
+        """
         ...
 
     def cache_token(self, voice: str) -> str:

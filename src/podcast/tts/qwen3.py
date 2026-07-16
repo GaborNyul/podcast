@@ -13,6 +13,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Protocol, cast
 
+from podcast import emphasis
 from podcast.config import AppConfig
 from podcast.errors import TTSError
 from podcast.tts.base import EngineInfo
@@ -45,6 +46,35 @@ INSTALL_HINT = (
     "the qwen3 extra is not installed; run `uv sync --extra qwen3` "
     "(pulls the qwen-tts package and TheRock ROCm torch wheels for gfx1151 — see README)"
 )
+# ADR 0014: emphasis is best-effort — spans render as CAPS in the spoken text and this
+# clause names them in the instruct channel. The 2026-07-15 A/B audition confirmed
+# CAPS+instruct as the default strategy; the clause wording lives in this one template.
+EMPHASIS_CLAUSE_TEMPLATE = "Put strong emphasis on the {noun} {names}."
+
+
+# Per-span treatment, tuned by the two-round 2026-07-15 hardware audition:
+# CAPS-in-text is the only lever qwen3 reliably follows; the clause merely
+# calibrates an actual CAPS change (clause without a CAPS change went 0-for-5,
+# stressing the wrong word or nothing). So a span is treated — uppercased in
+# the text AND named in the clause — exactly when its word content (the span's
+# alphanumeric characters) is longer than 2 chars and uppercasing changes it.
+# Everything else gets no treatment, only its markup stripped: short words
+# (CAPS read 'it' as the acronym "eye-tee" — punctuation as in 'it.' must not
+# smuggle them past the guard) and words CAPS cannot change (all-caps
+# 'RAG'/'AI', numerals '100').
+def _treated(span: str) -> bool:
+    """True when the span is uppercased in the text and named in the clause."""
+    word = "".join(ch for ch in span if ch.isalnum())
+    return len(word) > 2 and word.upper() != word
+
+
+def _emphasis_clause(span_texts: Sequence[str]) -> str:
+    """Instruct clause naming each distinct stressed span as written; empty when none."""
+    if not span_texts:
+        return ""
+    *head, last = (f"'{span}'" for span in dict.fromkeys(span_texts))
+    names = f"{', '.join(head)} and {last}" if head else last
+    return EMPHASIS_CLAUSE_TEMPLATE.format(noun="words" if head else "word", names=names)
 
 
 class Qwen3Engine:
@@ -94,17 +124,34 @@ class Qwen3Engine:
 
     def info(self) -> EngineInfo:
         return EngineInfo(
-            name=self.name, device=self._device, sample_rate=SAMPLE_RATE, supports_delivery=True
+            name=self.name,
+            device=self._device,
+            sample_rate=SAMPLE_RATE,
+            supports_delivery=True,
+            supports_emphasis=True,
         )
 
     def synthesize_line(self, text: str, voice: str, out_path: Path, *, delivery: str = "") -> None:
         model = self._load()
+        treated = [span for span in emphasis.spans(text) if _treated(span)]
+        # With no treated span this stays byte-identical to the unmarked path —
+        # the text renders to its markup-stripped form (exactly the text an
+        # unmarked script would carry) and the clause is empty, so instruct is
+        # the delivery note alone or None.
+        clause = _emphasis_clause(treated)
+        note = delivery.strip()
+        # A note ending in any non-alphanumeric character ('.', '!', '?', '…', …)
+        # already carries its own separator; only a bare word needs the '. ' join.
+        if clause and note and not note[-1].isalnum():
+            instruct = f"{note} {clause}"
+        else:
+            instruct = ". ".join(part for part in (note, clause) if part)
         try:
             wavs, sample_rate = model.generate_custom_voice(
-                text=text,
+                text=emphasis.render(text, lambda span: span.upper() if _treated(span) else span),
                 language=LANGUAGE,
                 speaker=voice,
-                instruct=delivery.strip() or None,
+                instruct=instruct or None,
                 temperature=self._temperature,
                 top_p=self._top_p,
                 repetition_penalty=self._repetition_penalty,

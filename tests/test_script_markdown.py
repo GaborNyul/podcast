@@ -6,6 +6,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
+from podcast import emphasis
 from podcast.errors import ScriptError
 from podcast.script.markdown import (
     markdown_to_transcript,
@@ -18,7 +19,19 @@ from podcast.script.models import Transcript, Turn
 
 _HOSTS = ["Alex", "Maya"]
 
-_turn_text = st.text(min_size=0, max_size=200).map(normalize_turn_text)
+
+def _canonical_turn_text(value: str) -> str:
+    """The write-side canonical form: emphasis-normalize first, then whitespace-collapse."""
+    return normalize_turn_text(emphasis.normalize(value))
+
+
+# General text plus a star-dense alphabet so emphasis markup (valid and malformed)
+# is generated often.
+_raw_turn_texts = st.one_of(
+    st.text(min_size=0, max_size=200),
+    st.text(alphabet=st.sampled_from(list("*ab c!\n")), max_size=40),
+)
+_turn_text = _raw_turn_texts.map(_canonical_turn_text)
 _deliveries = st.text(min_size=0, max_size=60).map(normalize_delivery)
 _titles = st.text(min_size=1, max_size=80).filter(lambda value: value.strip() != "")
 
@@ -51,13 +64,36 @@ class TestRoundTrip:
         again = transcript_to_markdown(markdown_to_transcript(once))
         assert once == again
 
+    @given(text=_raw_turn_texts)
+    def test_round_trip_is_total_for_arbitrary_turn_text(self, text: str) -> None:
+        """Serialize-then-parse never raises; the text lands in the canonical form."""
+        transcript = Transcript(title="T", hosts=_HOSTS, turns=[Turn(speaker="Alex", text=text)])
+        serialized = transcript_to_markdown(transcript)
+        parsed = markdown_to_transcript(serialized)
+        assert parsed.turns[0].text == _canonical_turn_text(text)
+        # Oracle-free idempotence: re-serializing the parse is byte-stable.
+        assert transcript_to_markdown(parsed) == serialized
+
     def test_unicode_title_and_text_survive(self) -> None:
         transcript = Transcript(
             title='Űrhajó: a "nagy" kaland 🚀',
             hosts=_HOSTS,
-            turns=[Turn(speaker="Maya", text="Szia! **bold** [link] `code`")],
+            turns=[Turn(speaker="Maya", text="Szia! Űrhajó — a „nagy” kaland 🚀 [link] `code`")],
         )
         assert markdown_to_transcript(transcript_to_markdown(transcript)) == transcript
+
+    def test_markdown_bold_is_canonicalized_to_emphasis(self) -> None:
+        transcript = Transcript(
+            title="T",
+            hosts=_HOSTS,
+            turns=[Turn(speaker="Maya", text="Szia! **bold** [link] `code`")],
+        )
+        parsed = markdown_to_transcript(transcript_to_markdown(transcript))
+        # `**bold**` is not the emphasis grammar (ADR 0014): write-side
+        # canonicalization keeps the inner `*bold*` span and drops the stray
+        # outer asterisks; from then on the round-trip is byte-stable.
+        assert parsed.turns[0].text == "Szia! *bold* [link] `code`"
+        assert markdown_to_transcript(transcript_to_markdown(parsed)) == parsed
 
 
 class TestTranscriptToMarkdown:
@@ -103,6 +139,10 @@ class TestTurnToLine:
     def test_grammar_breaking_characters_are_dropped_from_delivery(self) -> None:
         line = turn_to_line(Turn(speaker="Alex", text="Hi.", delivery="wry: [aside] beat"))
         assert line == "**Alex [wry aside beat]:** Hi."
+
+    def test_stray_asterisks_are_dropped_and_valid_spans_kept(self) -> None:
+        line = turn_to_line(Turn(speaker="Alex", text="keep *this*, drop ** and * strays"))
+        assert line == "**Alex:** keep *this*, drop and strays"
 
 
 class TestMarkdownToTranscript:
@@ -161,6 +201,37 @@ class TestMarkdownToTranscript:
         transcript = markdown_to_transcript(text)
         assert transcript.turns[0].text == "I rewrote this line by hand!"
 
+    def test_valid_emphasis_is_preserved_in_turn_text(self) -> None:
+        text = (
+            '---\ntitle: "T"\nhosts: ["Alex", "Maya"]\n---\n\n'
+            "**Alex:** the *whole point*, not a footnote\n"
+        )
+        assert markdown_to_transcript(text).turns[0].text == "the *whole point*, not a footnote"
+
+    def test_two_char_emphasis_span_survives_the_round_trip(self) -> None:
+        # A minimal-width span: two chars exercise the grammar's optional
+        # interior with an empty middle; the span must not be dropped as a
+        # stray by write-side canonicalization or rejected by the parser.
+        transcript = Transcript(
+            title="T", hosts=_HOSTS, turns=[Turn(speaker="Alex", text="that's *it* folks")]
+        )
+        parsed = markdown_to_transcript(transcript_to_markdown(transcript))
+        assert parsed.turns[0].text == "that's *it* folks"
+
+    @pytest.mark.parametrize(
+        "bad_text",
+        ["so **bold** wrong", "a stray * here", "a * padded * span"],
+    )
+    def test_malformed_emphasis_raises_with_line_number(self, bad_text: str) -> None:
+        text = f'---\ntitle: "T"\nhosts: ["Alex", "Maya"]\n---\n\n**Alex:** {bad_text}\n'
+        expected = (
+            r"line 6 has stray or malformed emphasis"
+            r".*stress a word as `\*word\*`"
+            r".*literal '\*' cannot be written"
+        )
+        with pytest.raises(ScriptError, match=expected):
+            markdown_to_transcript(text)
+
     def test_delivery_note_is_parsed_from_speaker_token(self) -> None:
         text = (
             '---\ntitle: "T"\nhosts: ["Alex", "Maya"]\n---\n\n'
@@ -180,6 +251,32 @@ class TestMarkdownToTranscript:
     def test_unknown_host_with_delivery_raises(self) -> None:
         text = '---\ntitle: "T"\nhosts: ["Alex", "Maya"]\n---\n\n**Zed [warm]:** hello\n'
         with pytest.raises(ScriptError, match="unknown host 'Zed \\[warm\\]'"):
+            markdown_to_transcript(text)
+
+    def test_closing_bracket_without_opener_is_an_unknown_host(self) -> None:
+        text = '---\ntitle: "T"\nhosts: ["Alex", "Maya"]\n---\n\n**Alex]:** hi\n'
+        with pytest.raises(ScriptError, match="unknown host 'Alex\\]'"):
+            markdown_to_transcript(text)
+
+    def test_delivery_note_with_inner_brackets_splits_at_the_first_opener(self) -> None:
+        # The hand-edit tolerance the old regex gave: host = text before the
+        # FIRST '[', delivery = everything up to the trailing ']' (its own
+        # brackets then dropped by normalize_delivery).
+        text = (
+            '---\ntitle: "T"\nhosts: ["Alex", "Maya"]\n---\n\n**Alex [warm [really] tone]:** hi\n'
+        )
+        turn = markdown_to_transcript(text).turns[0]
+        assert turn.speaker == "Alex"
+        assert turn.delivery == "warm really tone"
+
+    def test_pathological_whitespace_speaker_token_fails_fast(self) -> None:
+        # The old `^(.*?)\s*\[(.*)\]$` delivery regex backtracked quadratically
+        # on a token like this (1.2s CPU at 50k spaces, ~20s at 200k); the
+        # string-op split is linear. Plain assertion by design — the suite's
+        # normal runtime/timeout is the regression guard.
+        token = "Bob" + " " * 50_000 + "x"
+        text = f'---\ntitle: "T"\nhosts: ["Alex", "Maya"]\n---\n\n**{token}:** hi\n'
+        with pytest.raises(ScriptError, match="unknown host"):
             markdown_to_transcript(text)
 
     def test_host_name_with_grammar_characters_is_rejected(self) -> None:

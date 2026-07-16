@@ -95,7 +95,13 @@ serve the whole arc.
 FORMAT FOR AUDIO
 Every turn is spoken text only: no stage directions, no bracketed cues like [laughs], no
 sound-effect notes, and no markdown or list notation inside spoken lines. If it cannot be
-spoken aloud, it does not belong in the script. Direction for how a line should be performed
+spoken aloud, it does not belong in the script — with exactly one exception: *word* in
+single asterisks marks the word a host leans on. Use it sparingly, a marked word or two
+every few sentences at most, and only where a human host would genuinely stress that word —
+a reveal, a contrast, a number that matters (write a stressed number out as words: *forty*
+percent, not *40*%): "And the entire fix was... *one* line of code." Most lines carry no
+mark at all. Stress stays inline as *word* and never migrates
+or duplicates into the delivery note; direction for how a whole line should be performed
 goes in the turn's separate "delivery" field instead: a short English performance note for
 the voice engine — three to eight words naming tone, pace, or emotional register, like
 "excited, racing ahead", "skeptical, slowing down", or "warm, letting the idea land". Give a
@@ -122,8 +128,11 @@ POLISH_BRIEF = (
     "conversation exactly where they help (a 'you know', a false start, a quick 'wait, "
     "really?'), let the hosts occasionally interrupt or finish each other's sentences, break "
     "up any two long turns that landed back-to-back, replace stiff hand-offs with reactions "
-    "that do work, and sharpen or add delivery notes wherever the register moves. Keep every "
-    "fact, attribution, analogy, callback, and ritual line intact, keep the same hosts and arc"
+    "that do work, sharpen or add delivery notes wherever the register moves, and give the "
+    "*word* stress marks the same pass: keep the ones that land, sharpen or move a misplaced "
+    "one, and sparingly add one where a host would lean on the word — never inflate their "
+    "count. Keep every fact, attribution, analogy, callback, and ritual line intact, keep "
+    "the same hosts and arc"
 )
 
 OPENING_POSITION = (

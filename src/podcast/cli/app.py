@@ -8,10 +8,11 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from rich.markup import escape
 from rich.progress import Progress
 from rich.table import Table
 
-from podcast import LICENSE, SOURCE_URL, __version__, doctor
+from podcast import LICENSE, SOURCE_URL, __version__, doctor, emphasis
 from podcast.audio import pacing
 from podcast.audio.assemble import assemble_episode, tempo_variant
 from podcast.cli import ui
@@ -204,13 +205,14 @@ def _dialogue_segments(
     spoken: list[Turn],
     voices: dict[str, str],
     composed: Callable[[Turn], str],
+    spoken_text: Callable[[Turn], str],
     stats: CacheStats,
     progress: Progress,
 ) -> list[Path]:
     """Whole-conversation render: any line change re-renders the dialogue, since
     every line's prosody depends on the lines before it."""
     lines = [
-        DialogueLine(speaker=turn.speaker, text=turn.text, delivery=composed(turn))
+        DialogueLine(speaker=turn.speaker, text=spoken_text(turn), delivery=composed(turn))
         for turn in spoken
     ]
     digest = hashlib.sha256()
@@ -219,7 +221,11 @@ def _dialogue_segments(
             digest.update(part.encode("utf-8"))
             digest.update(b"\x00")
     for line in lines:
-        for part in (engine.name, voices[line.speaker], line.text, line.delivery):
+        # line.speaker joins the key: dialogue engines derive their speaker-slot
+        # assignment (SoulX's [S1]/[S2]) from the speaker sequence, so two hosts
+        # sharing one resolved voice still produce different audio when lines
+        # swap speakers — the voice alone cannot distinguish those renders.
+        for part in (engine.name, line.speaker, voices[line.speaker], line.text, line.delivery):
             digest.update(part.encode("utf-8"))
             digest.update(b"\x00")
     key = digest.hexdigest()[:32]
@@ -240,10 +246,12 @@ def _dialogue_segments(
 def _run_synthesize(config: AppConfig, workspace: Workspace, progress: Progress) -> CacheStats:
     transcript = load_transcript(workspace)
     engine = create_engine(config)
+    info = engine.info()
     voices = resolve_voices(config, engine.name, transcript.hosts)
     stats = CacheStats()
     spoken = [turn for turn in transcript.turns if turn.text.strip()]
-    supports_delivery = engine.info().supports_delivery
+    supports_delivery = info.supports_delivery
+    supports_emphasis = info.supports_emphasis
     styles = {host.name: host.style for host in config.script.hosts}
     tempos = {host.name: host.tempo for host in config.script.hosts}
 
@@ -252,25 +260,31 @@ def _run_synthesize(config: AppConfig, workspace: Workspace, progress: Progress)
             return ""
         return "; ".join(part for part in (styles.get(turn.speaker, ""), turn.delivery) if part)
 
+    def spoken_text(turn: Turn) -> str:
+        if not supports_emphasis:
+            return emphasis.strip_markup(turn.text)
+        return turn.text
+
     rendered_paths: list[Path] = []
-    if engine.info().dialogue_native and isinstance(engine, DialogueEngine):
+    if info.dialogue_native and isinstance(engine, DialogueEngine):
         rendered_paths = _dialogue_segments(
-            engine, workspace, spoken, voices, composed, stats, progress
+            engine, workspace, spoken, voices, composed, spoken_text, stats, progress
         )
     else:
         task = progress.add_task("Synthesizing lines", total=len(spoken))
         for turn in spoken:
             voice = voices[turn.speaker]
             delivery = composed(turn)
+            line_text = spoken_text(turn)
 
             def render(
-                path: Path, text: str = turn.text, voice_id: str = voice, note: str = delivery
+                path: Path, text: str = line_text, voice_id: str = voice, note: str = delivery
             ) -> None:
                 engine.synthesize_line(text, voice_id, path, delivery=note)
 
             rendered_paths.append(
                 ensure_segment(
-                    workspace.segments_dir, engine.name, voice, turn.text, delivery, render, stats
+                    workspace.segments_dir, engine.name, voice, line_text, delivery, render, stats
                 )
             )
             progress.advance(task)
@@ -284,7 +298,7 @@ def _run_synthesize(config: AppConfig, workspace: Workspace, progress: Progress)
         segment_paths,
         workspace.episode_path,
         work_dir=workspace.segments_dir / "work",
-        sample_rate=engine.info().sample_rate,
+        sample_rate=info.sample_rate,
         pause_min_ms=config.audio.pause_min_ms,
         pause_max_ms=config.audio.pause_max_ms,
         bitrate=config.audio.mp3_bitrate,
@@ -416,5 +430,7 @@ def main() -> None:
     try:
         app()
     except PodcastError as exc:
-        ui.err.print(f"[fail]error:[/] {exc}")
+        # Error text may quote script fragments ('[/]', '[laughs]'…): escape it
+        # so rich prints it literally; only the [fail] style tag stays markup.
+        ui.err.print(f"[fail]error:[/] {escape(str(exc))}")
         raise SystemExit(exc.exit_code) from exc

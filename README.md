@@ -39,7 +39,9 @@ uv run podcast doctor   # verify ffmpeg, workspace, and the configured engine
 uv run podcast generate paper.pdf notes.md -d 15
 
 # 2. Open episodes/<slug>/script.md, tweak any lines you like — including the
-#    [delivery notes] that steer tone and pace on the qwen3 engine
+#    [delivery notes] that steer tone and pace on the qwen3 engine, and *word*
+#    stress marks (single asterisks; a literal * cannot be written — ADR 0014;
+#    stress numbers written out as words: *forty*, not *40*)
 
 # 3. Render the audio (only edited lines are re-synthesized on re-runs)
 uv run podcast synthesize
@@ -101,6 +103,7 @@ tempo = 1.1                                 # pitch-preserving speed-up of this 
 [tts]
 engine = "qwen3"                           # qwen3 (GPU) | kokoro (CPU) | soulx (GPU, dialogue-native)
 qwen3_temperature = 0.8                    # sampling; lower reads robotic (ADR 0011)
+soulx_stress_markup = false                # opt-in: SoulX stress tokens vocalize as garbage (ADR 0014)
 [tts.voices]                               # optional per-speaker voice overrides
                                            # (engine-specific ids — swap when switching engines)
 Alex = "Ryan"
@@ -185,6 +188,8 @@ models requires deliberately regenerating those files (see `tests/test_contracts
 Licensed under the **GNU Affero General Public License v3.0 or later (AGPLv3+)** —
 see [LICENSE](LICENSE). In short: any distributed or **network-hosted** derivative must
 also be released under the AGPLv3, with source offered to its users. Podcasts you
-generate are your own — program output is not a derivative of the program.
+generate are generally your own — the AGPL covers this program's source code, not the
+content you produce with it; your output is subject to the license only if it would
+itself be a *covered work* (for example, by incorporating part of the program).
 
 Copyright (C) 2026 Gabor Nyul

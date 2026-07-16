@@ -11,6 +11,7 @@ import re
 from collections.abc import Callable
 from typing import cast
 
+from podcast import emphasis
 from podcast.config import AppConfig, HostSpec
 from podcast.errors import ScriptError
 from podcast.llm.base import ChatMessage, ChatProvider, system, user
@@ -245,6 +246,8 @@ def _dialogue_request(
     messages: list[ChatMessage],
     host_names: list[str],
 ) -> list[Turn]:
+    """The single funnel for LLM-written dialogue: turn text is emphasis-normalized
+    (stray `*` dropped, ADR 0014) and turns that normalize to blank are dropped."""
     chunk = complete_structured(
         provider,
         messages,
@@ -256,11 +259,11 @@ def _dialogue_request(
     return [
         Turn(
             speaker=_resolve_speaker(turn.speaker, host_names),
-            text=turn.text,
+            text=text,
             delivery=turn.delivery,
         )
         for turn in chunk.turns
-        if turn.text.strip()
+        if (text := emphasis.normalize(turn.text)).strip()
     ]
 
 
@@ -364,11 +367,15 @@ def ensure_length(
             f"{budget_words} words. {direction} it to hit the target while keeping "
             f"the same hosts, structure, facts, and natural flow.{guidance} Both word counts "
             "cover spoken text only: the bracketed delivery notes on some lines are "
-            "performance metadata — keep or adjust them, but never count them.\n\n"
+            "performance metadata — keep or adjust them, but never count them. "
+            "Inline *word* stress marks are spoken text and count normally; keep "
+            "them on sentences that survive the rewrite.\n\n"
             f"{script_text}"
         ),
     ]
     repaired_turns = _dialogue_request(provider, config, messages, transcript.hosts)
+    if not repaired_turns:
+        return transcript
     repaired = transcript.model_copy(update={"turns": repaired_turns})
     if abs(repaired.word_count() - budget_words) < abs(actual - budget_words):
         return repaired

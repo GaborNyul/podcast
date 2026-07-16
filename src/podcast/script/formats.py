@@ -187,11 +187,13 @@ BRIEF_POLISH_BRIEF = (
     "breath and break any sentence carrying two; cut every hedge and every word that "
     "restates the line before it; make each point run setup, fact, landing, and put every "
     "number's comparison in the same breath it appears; keep the turns between points "
-    'spoken ("Second thing —", "Last one — and it\'s the kicker."), never list-like; and '
+    'spoken ("Second thing —", "Last one — and it\'s the kicker."), never list-like; '
     'sharpen or add prosody-focused delivery notes ("leaning in, faster", "low, letting it '
-    'sit") on every register shift — the hook, each kicker, the landing. Keep it a SOLO '
-    "script with exactly one speaker — never add another voice — and keep every fact, "
-    "number, and attribution intact"
+    'sit") on every register shift — the hook, each kicker, the landing; and hold the '
+    "*word* stress marks to the same economy: keep the ones that earn their half-second, "
+    "move or sharpen a misplaced one, and add one only where the voice genuinely leans — "
+    "never inflate. Keep it a SOLO script with exactly one speaker — never add another "
+    "voice — and keep every fact, number, and attribution intact"
 )
 
 BRIEF_OPENING_POSITION = (
@@ -335,9 +337,12 @@ DEBATE_POLISH_BRIEF = (
     "that make the fight feel personal: let the fire interrupt where the temperature spikes "
     "('Come on\u2014'), let the ice land a dry three-word dismissal after a long build, break up "
     "any two long turns with a counter that does work, cut any exchange that re-argues a point "
-    "already made, and sharpen or add delivery notes ('relishing it', 'coldly precise', 'grudging "
-    "concession') wherever the register moves. Keep every fact, attribution, stance, and the "
-    "no-verdict ending intact, keep the same hosts and arc"
+    "already made, sharpen or add delivery notes ('relishing it', 'coldly precise', 'grudging "
+    "concession') wherever the register moves, and treat the *word* stress marks like "
+    "ammunition: keep the ones that hit, move or sharpen a misplaced one, and sparingly add "
+    "one where a blow lands \u2014 never inflate; a host who stresses everything stresses "
+    "nothing. Keep every fact, attribution, stance, and the no-verdict ending intact, keep "
+    "the same hosts and arc"
 )
 
 DEBATE_OPENING_POSITION = (
@@ -529,9 +534,11 @@ CRITIQUE_POLISH_BRIEF = (
     '("hm," "good catch," "yeah, that one stuck with me too"), make every turn react to the '
     "turn before it, let the verifier cut in with the material's defense at the natural moments, "
     "fix any two consecutive turns from the same voice so the hosts strictly alternate, break up "
-    "any two long turns, and sharpen or add delivery notes ('measured', 'pressing', 'conceding "
-    "gracefully') wherever the register moves. Keep every anchor, supporting specific, fix, and "
-    "verdict intact, keep the same hosts and arc"
+    "any two long turns, sharpen or add delivery notes ('measured', 'pressing', 'conceding "
+    "gracefully') wherever the register moves, and hold the *word* stress marks to the audit's "
+    "own bar: keep the ones that carry a finding's key word or a verdict, move or sharpen a "
+    "misplaced one, and sparingly add one where a judgment lands \u2014 never inflate. Keep "
+    "every anchor, supporting specific, fix, and verdict intact, keep the same hosts and arc"
 )
 
 CRITIQUE_OPENING_POSITION = (

@@ -3,7 +3,8 @@
 """Tests for podcast.cli.app."""
 
 import json
-from collections.abc import Callable
+import sys
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import cast
 
@@ -15,7 +16,7 @@ from podcast.cli import app as app_mod
 from podcast.config import AppConfig
 from podcast.doctor import CheckResult
 from podcast.errors import ConfigError, ScriptError
-from podcast.tts.base import EngineInfo
+from podcast.tts.base import DialogueLine, EngineInfo
 
 runner = CliRunner()
 
@@ -178,10 +179,12 @@ class TestGenerateCommand:
 class _FakeEngine:
     name = "kokoro"
 
-    def __init__(self, *, supports_delivery: bool = False) -> None:
+    def __init__(self, *, supports_delivery: bool = False, supports_emphasis: bool = False) -> None:
         self.renders = 0
         self.deliveries: list[str] = []
+        self.texts: list[str] = []
         self.supports_delivery = supports_delivery
+        self.supports_emphasis = supports_emphasis
 
     def info(self) -> EngineInfo:
         return EngineInfo(
@@ -189,11 +192,13 @@ class _FakeEngine:
             device="cpu",
             sample_rate=24000,
             supports_delivery=self.supports_delivery,
+            supports_emphasis=self.supports_emphasis,
         )
 
     def synthesize_line(self, text: str, voice: str, out_path: Path, *, delivery: str = "") -> None:
-        del text, voice
+        del voice
         self.renders += 1
+        self.texts.append(text)
         self.deliveries.append(delivery)
         out_path.write_bytes(b"RIFF-fake")
 
@@ -201,8 +206,10 @@ class _FakeEngine:
 class _FakeDialogueEngine:
     name = "soulx"
 
-    def __init__(self) -> None:
+    def __init__(self, *, supports_emphasis: bool = False) -> None:
         self.dialogue_calls = 0
+        self.line_texts: list[str] = []
+        self.supports_emphasis = supports_emphasis
 
     def info(self) -> EngineInfo:
         return EngineInfo(
@@ -211,15 +218,19 @@ class _FakeDialogueEngine:
             sample_rate=24000,
             dialogue_native=True,
             supports_delivery=True,
+            supports_emphasis=self.supports_emphasis,
         )
 
     def synthesize_line(self, text: str, voice: str, out_path: Path, *, delivery: str = "") -> None:
         del text, voice, delivery
         out_path.write_bytes(b"RIFF-fake")
 
-    def synthesize_dialogue(self, lines: object, voices: object, out_paths: list[Path]) -> None:
-        del lines, voices
+    def synthesize_dialogue(
+        self, lines: Sequence[DialogueLine], voices: object, out_paths: list[Path]
+    ) -> None:
+        del voices
         self.dialogue_calls += 1
+        self.line_texts.extend(line.text for line in lines)
         for path in out_paths:
             path.write_bytes(b"RIFF-fake")
 
@@ -256,6 +267,30 @@ def _generate_episode(isolated_env: Path, monkeypatch: pytest.MonkeyPatch) -> Pa
     )
     assert result.exit_code == 0, result.output
     return isolated_env / "episodes" / "demo"
+
+
+def _mark_emphasis(workspace: Path) -> None:
+    """Hand-edit ONLY emphasis markup into one spoken line of script.md."""
+    script = workspace / "script.md"
+    content = script.read_text(encoding="utf-8")
+    assert "plain terms" in content
+    script.write_text(content.replace("plain terms", "*plain* terms", 1), encoding="utf-8")
+
+
+def _mark_script_before_synthesis(workspace: Path) -> None:
+    """Mark up the pristine script: one line with multiple spans plus a span-only turn."""
+    script = workspace / "script.md"
+    content = script.read_text(encoding="utf-8")
+    assert "plain terms" in content
+    content = content.replace("plain terms", "*plain* *terms*", 1)
+    script.write_text(content.rstrip("\n") + "\n**Alex:** *wow*\n", encoding="utf-8")
+
+
+def _fake_dialogue_voices(monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_voices(*_args: object) -> dict[str, str]:
+        return {"Alex": "alex", "Maya": "maya"}
+
+    monkeypatch.setattr(app_mod, "resolve_voices", fake_voices)
 
 
 class TestSynthesizeCommand:
@@ -464,6 +499,130 @@ class TestSynthesizeCommand:
         assert result.exit_code == 0
         assert engine.renders == baseline + 1
 
+    def test_marked_script_reaches_non_supporting_engine_markup_free(
+        self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Cold cache with markup already in the script: every render must be stripped.
+        workspace = _generate_episode(isolated_env, monkeypatch)
+        _mark_script_before_synthesis(workspace)
+        engine = _FakeEngine()
+        monkeypatch.setattr(app_mod, "create_engine", _engine_factory(engine))
+        _fake_assemble(monkeypatch)
+        result = runner.invoke(app_mod.app, ["synthesize", "demo"])
+        assert result.exit_code == 0, result.output
+        assert any("plain terms" in text for text in engine.texts)  # spans unwrapped in place
+        assert "wow" in engine.texts  # a turn that is nothing but a span still speaks
+        assert all("*" not in text for text in engine.texts)
+
+    def test_marked_script_reaches_non_supporting_dialogue_engine_markup_free(
+        self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        workspace = _generate_episode(isolated_env, monkeypatch)
+        _mark_script_before_synthesis(workspace)
+        engine = _FakeDialogueEngine()
+        monkeypatch.setattr(app_mod, "create_engine", _engine_factory(engine))
+        _fake_dialogue_voices(monkeypatch)
+        _fake_assemble(monkeypatch)
+        result = runner.invoke(app_mod.app, ["synthesize", "demo"])
+        assert result.exit_code == 0, result.output
+        assert any("plain terms" in text for text in engine.line_texts)
+        assert "wow" in engine.line_texts
+        assert all("*" not in text for text in engine.line_texts)
+
+    def test_emphasis_edit_is_free_on_non_supporting_engine(
+        self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        workspace = _generate_episode(isolated_env, monkeypatch)
+        engine = _FakeEngine()
+        monkeypatch.setattr(app_mod, "create_engine", _engine_factory(engine))
+        _fake_assemble(monkeypatch)
+        runner.invoke(app_mod.app, ["synthesize", "demo"])
+        baseline = engine.renders
+        _mark_emphasis(workspace)
+        result = runner.invoke(app_mod.app, ["synthesize", "demo"])
+        assert result.exit_code == 0
+        # Stripped text is unchanged -> all hits; the engine is never invoked while
+        # markup exists (the markup-free guarantee is pinned by the cold-cache test).
+        assert engine.renders == baseline
+
+    def test_emphasis_edit_rerenders_only_one_segment_on_supporting_engine(
+        self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        workspace = _generate_episode(isolated_env, monkeypatch)
+        engine = _FakeEngine(supports_emphasis=True)
+        monkeypatch.setattr(app_mod, "create_engine", _engine_factory(engine))
+        _fake_assemble(monkeypatch)
+        runner.invoke(app_mod.app, ["synthesize", "demo"])
+        baseline = engine.renders
+        _mark_emphasis(workspace)
+        result = runner.invoke(app_mod.app, ["synthesize", "demo"])
+        assert result.exit_code == 0
+        assert engine.renders == baseline + 1  # marked text keys the cache
+        assert any("*plain* terms" in text for text in engine.texts)  # verbatim markup
+
+    def test_dialogue_emphasis_edit_is_free_on_non_supporting_engine(
+        self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        workspace = _generate_episode(isolated_env, monkeypatch)
+        engine = _FakeDialogueEngine()
+        monkeypatch.setattr(app_mod, "create_engine", _engine_factory(engine))
+        _fake_dialogue_voices(monkeypatch)
+        _fake_assemble(monkeypatch)
+        runner.invoke(app_mod.app, ["synthesize", "demo"])
+        assert engine.dialogue_calls == 1
+        _mark_emphasis(workspace)
+        result = runner.invoke(app_mod.app, ["synthesize", "demo"])
+        assert result.exit_code == 0
+        # Stripped digest is unchanged -> all hits; the engine is never invoked while
+        # markup exists (the markup-free guarantee is pinned by the cold-cache test).
+        assert engine.dialogue_calls == 1
+
+    def test_dialogue_emphasis_edit_rerenders_on_supporting_engine(
+        self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        workspace = _generate_episode(isolated_env, monkeypatch)
+        engine = _FakeDialogueEngine(supports_emphasis=True)
+        monkeypatch.setattr(app_mod, "create_engine", _engine_factory(engine))
+        _fake_dialogue_voices(monkeypatch)
+        _fake_assemble(monkeypatch)
+        runner.invoke(app_mod.app, ["synthesize", "demo"])
+        assert engine.dialogue_calls == 1
+        _mark_emphasis(workspace)
+        result = runner.invoke(app_mod.app, ["synthesize", "demo"])
+        assert result.exit_code == 0
+        assert engine.dialogue_calls == 2  # marked text joins the dialogue digest
+        assert any("*plain* terms" in text for text in engine.line_texts)
+
+    def test_dialogue_speaker_swap_rerenders_when_hosts_share_a_voice(
+        self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        workspace = _generate_episode(isolated_env, monkeypatch)
+        engine = _FakeDialogueEngine()
+        monkeypatch.setattr(app_mod, "create_engine", _engine_factory(engine))
+
+        def shared_voice(*_args: object) -> dict[str, str]:
+            return {"Alex": "shared", "Maya": "shared"}
+
+        monkeypatch.setattr(app_mod, "resolve_voices", shared_voice)
+        _fake_assemble(monkeypatch)
+        runner.invoke(app_mod.app, ["synthesize", "demo"])
+        assert engine.dialogue_calls == 1
+        # Swap who says what: same texts, same resolved voice, different speaker
+        # sequence. SoulX derives its [S1]/[S2] slot assignment from the speaker
+        # sequence, so the swapped script must re-render, not reuse stale audio.
+        script = workspace / "script.md"
+        content = script.read_text(encoding="utf-8")
+        swapped = (
+            content.replace("**Alex", "**SWAP")
+            .replace("**Maya", "**Alex")
+            .replace("**SWAP", "**Maya")
+        )
+        assert swapped != content
+        script.write_text(swapped, encoding="utf-8")
+        result = runner.invoke(app_mod.app, ["synthesize", "demo"])
+        assert result.exit_code == 0
+        assert engine.dialogue_calls == 2
+
     def test_defaults_to_most_recent_episode(
         self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -543,6 +702,27 @@ class TestMain:
     def test_passes_through_clean_runs(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(app_mod, "app", lambda: None)
         app_mod.main()
+
+    def test_error_text_with_markup_like_fragments_prints_literally(
+        self,
+        isolated_env: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        # A hand-edited line with a stray '*' makes the emphasis ScriptError
+        # quote the script fragment; a '[/]' inside that fragment must reach
+        # the user literally instead of crashing rich's markup parser while
+        # the real error is being reported.
+        workspace = _generate_episode(isolated_env, monkeypatch)
+        script = workspace / "script.md"
+        content = script.read_text(encoding="utf-8")
+        assert "plain terms" in content
+        script.write_text(content.replace("plain terms", "plain [/] * terms", 1), "utf-8")
+        monkeypatch.setattr(sys, "argv", ["podcast", "synthesize", "demo"])
+        with pytest.raises(SystemExit) as excinfo:
+            app_mod.main()
+        assert excinfo.value.code == ScriptError.exit_code
+        assert "[/]" in capsys.readouterr().err
 
 
 class TestFormatsCommand:

@@ -18,6 +18,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, Protocol, cast
 
+from podcast import emphasis
 from podcast.config import AppConfig
 from podcast.errors import TTSError
 from podcast.tts.base import DialogueLine, EngineInfo
@@ -90,10 +91,20 @@ def shim_torchaudio() -> None:
     torchaudio.save = _save
 
 
+def _stress_span(span: str) -> str:
+    """One `*emphasis*` span as the tokenizer's added stress tokens (ADR 0014)."""
+    return f"<|stress_start|>{span}<|stress_end|>"
+
+
 def tagged_text(line: DialogueLine) -> str:
     """One single-line SoulX utterance: paralinguistic tags named by the delivery
-    note, then the whitespace-flattened text (upstream's parser is single-line)."""
-    text = " ".join(line.text.split())
+    note, then the whitespace-flattened text (upstream's parser is single-line)
+    with `*emphasis*` spans rendered as stress tokens.
+
+    Rendering is unconditional: with `tts.soulx_stress_markup` off the engine
+    reports `supports_emphasis=False`, the CLI pre-strips markup, and render is
+    the identity — so disabled runs are structurally token-free."""
+    text = " ".join(emphasis.render(line.text, _stress_span).split())
     if not text:
         raise TTSError(f"speaker {line.speaker!r} has an empty line; SoulX needs spoken text")
     note = line.delivery.lower()
@@ -110,6 +121,7 @@ class SoulXEngine:
         self._models_dir = config.paths.resolved_models_dir()
         self._refs = dict(config.tts.soulx_refs)
         self._device = config.tts.device or "cuda"
+        self._stress_markup = config.tts.soulx_stress_markup
         self._model: DialogueModel | None = None
         self._dataset: object = None
         self._process_single_input: Any = None
@@ -121,6 +133,7 @@ class SoulXEngine:
             sample_rate=SAMPLE_RATE,
             dialogue_native=True,
             supports_delivery=True,
+            supports_emphasis=self._stress_markup,
         )
 
     def _load(self) -> DialogueModel:

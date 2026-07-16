@@ -183,6 +183,40 @@ class TestWriteDialogue:
         assert transcript.turns[1].delivery == ""
         assert "**Alex [excited, leaning in]:** Get this." in provider.prompts[1]
 
+    def test_malformed_emphasis_is_normalized(self) -> None:
+        """The dialogue funnel emphasis-normalizes every LLM reply (ADR 0014)."""
+        config = AppConfig()
+        outline = Outline(title="T", segments=[OutlineSegment(heading="only", target_words=60)])
+        text = "this is **bold** and *valid* and stray* stuff"
+        reply = json.dumps({"turns": [{"speaker": "Alex", "text": text}]})
+        provider = _ScriptedProvider([reply])
+        transcript = pipeline.write_dialogue(provider, config, SOURCES, outline)
+        assert transcript.turns[0].text == "this is *bold* and *valid* and stray stuff"
+
+    def test_asterisk_only_turn_is_dropped(self) -> None:
+        """A turn that normalizes to blank is filtered out, not kept as noise."""
+        config = AppConfig()
+        outline = Outline(title="T", segments=[OutlineSegment(heading="only", target_words=60)])
+        turns = [
+            {"speaker": "Alex", "text": " ** "},
+            {"speaker": "Maya", "text": "a real line"},
+        ]
+        provider = _ScriptedProvider([json.dumps({"turns": turns})])
+        transcript = pipeline.write_dialogue(provider, config, SOURCES, outline)
+        assert [turn.text for turn in transcript.turns] == ["a real line"]
+
+    def test_segment_of_only_asterisk_turns_counts_as_empty(self) -> None:
+        """Emptiness is judged on the normalized text, so `*` alone is no dialogue."""
+        config = AppConfig()
+        outline = Outline(title="T", segments=[OutlineSegment(heading="only", target_words=60)])
+        turns = [
+            {"speaker": "Alex", "text": "*"},
+            {"speaker": "Maya", "text": "* *"},
+        ]
+        provider = _ScriptedProvider([json.dumps({"turns": turns})])
+        with pytest.raises(ScriptError, match="produced no dialogue"):
+            pipeline.write_dialogue(provider, config, SOURCES, outline)
+
     def test_position_hints_carry_deep_dive_rituals(self) -> None:
         config = AppConfig()
         outline = Outline(
@@ -225,6 +259,20 @@ class TestPolishDialogue:
         assert "approximately 10 words" in provider.prompts[0]
         assert "**Alex [wry]:** one two three four five" in provider.prompts[0]
         assert result.turns[0].delivery == "amused"
+
+    def test_polish_reply_emphasis_is_normalized(self) -> None:
+        """Polish rides the same funnel, so its replies are normalized too."""
+        polished = [{"speaker": "Maya", "text": "keep *this* but not **that"}]
+        provider = _ScriptedProvider([json.dumps({"turns": polished})])
+        result = pipeline.polish_dialogue(provider, AppConfig(), self._transcript())
+        assert result.turns[0].text == "keep *this* but not that"
+
+    def test_polish_reply_of_only_stray_asterisks_keeps_the_original(self) -> None:
+        """A reply whose turns all normalize to blank is empty → polish falls back."""
+        polished = [{"speaker": "Maya", "text": " ** "}]
+        provider = _ScriptedProvider([json.dumps({"turns": polished})])
+        transcript = self._transcript()
+        assert pipeline.polish_dialogue(provider, AppConfig(), transcript) is transcript
 
     def test_disabled_polish_pass_skips_the_llm(self) -> None:
         config = AppConfig()
@@ -282,6 +330,24 @@ class TestEnsureLength:
         assert "**Alex [wry]:**" in provider.prompts[0]
         assert "never count them" in provider.prompts[0]  # notes excluded from word math
         assert result.turns[0].delivery == "calm"
+
+    def test_repair_prompt_says_stress_marks_are_spoken_and_kept(self) -> None:
+        transcript = self._transcript(50)
+        repaired_turns = [{"speaker": "Maya", "text": "word " * 100}]
+        provider = _ScriptedProvider([json.dumps({"turns": repaired_turns})])
+        pipeline.ensure_length(provider, AppConfig(), transcript, 100)
+        assert "stress marks are spoken text" in provider.prompts[0]
+
+    def test_repair_reply_of_only_stray_asterisks_keeps_the_original(self) -> None:
+        """An empty-after-normalize repair must never beat the real script."""
+        transcript = self._transcript(250)
+        repaired_turns = [
+            {"speaker": "Maya", "text": "*"},
+            {"speaker": "Alex", "text": " ** "},
+        ]
+        provider = _ScriptedProvider([json.dumps({"turns": repaired_turns})])
+        result = pipeline.ensure_length(provider, AppConfig(), transcript, 100)
+        assert result is transcript
 
     def test_worse_repair_is_discarded(self) -> None:
         transcript = self._transcript(80)
