@@ -185,6 +185,8 @@ models requires deliberately regenerating those files (see `tests/test_contracts
 Licensed under the **GNU Affero General Public License v3.0 or later (AGPLv3+)** —
 see [LICENSE](LICENSE). In short: any distributed or **network-hosted** derivative must
 also be released under the AGPLv3, with source offered to its users. Podcasts you
-generate are your own — program output is not a derivative of the program.
+generate are generally your own — the AGPL covers this program's source code, not the
+content you produce with it; your output is subject to the license only if it would
+itself be a *covered work* (for example, by incorporating part of the program).
 
 Copyright (C) 2026 Gabor Nyul
