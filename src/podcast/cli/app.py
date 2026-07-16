@@ -66,6 +66,7 @@ def doctor_command() -> None:
     config = load_config()
     results = doctor.run_checks(config)
     ui.out.print(ui.checks_table(results))
+    ui.out.print(f"License: {LICENSE} · source: {SOURCE_URL}")
     if not all(result.ok for result in results):
         raise typer.Exit(1)
 
