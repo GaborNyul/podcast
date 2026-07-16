@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Gabor Nyul
 """Transcript and outline models; tolerant of extra keys from LLM output."""
 
 from pydantic import BaseModel, ConfigDict, Field

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Gabor Nyul
 """Commit-message gate: reject AI assistant signatures.
 
 Standards v3 forbids assistant signatures in commit messages (see the "Git Commit

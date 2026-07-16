@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Gabor Nyul
 """Rich consoles: data on stdout, diagnostics and progress on stderr."""
 
 from collections.abc import Sequence

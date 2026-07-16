@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Gabor Nyul
 """One OpenAI-compatible chat transport serving ollama, ollama-cloud, openai, copilot."""
 
 from collections.abc import Mapping, Sequence

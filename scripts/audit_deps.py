@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Gabor Nyul
 """Dependency audit gate: pip-audit over the locked PyPI dependency set.
 
 Audits `uv export` output (project + dev dependencies, no extras) instead of the

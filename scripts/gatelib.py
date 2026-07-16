@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Gabor Nyul
 """Shared quality-gate runner for the gate scripts (standards v3)."""
 
 import shutil

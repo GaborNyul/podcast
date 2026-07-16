@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Gabor Nyul
 """SoulX-Podcast-1.7B: the dialogue-native GPU engine (ADR 0012).
 
 The whole conversation is rendered in one pass, so every line's prosody hears the
