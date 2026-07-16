@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Gabor Nyul
 """Content-aware pause scaling between turns (ADR 0011).
 
 Pause structure is a real affect channel: backchannels land fast, interruptions

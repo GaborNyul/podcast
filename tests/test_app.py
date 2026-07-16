@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Gabor Nyul
 """Tests for podcast.cli.app."""
 
 import json
@@ -34,6 +36,12 @@ class TestMainOptions:
         assert result.exit_code == 0
         assert f"podcast {__version__}" in result.output
 
+    def test_version_flag_shows_license_and_source(self) -> None:
+        result = runner.invoke(app_mod.app, ["--version"])
+        assert result.exit_code == 0
+        assert "AGPL-3.0-or-later" in result.output
+        assert "github.com/gabornyul/podcast" in result.output
+
     def test_no_arguments_shows_help(self) -> None:
         result = runner.invoke(app_mod.app, [])
         assert result.exit_code == 0
@@ -62,6 +70,16 @@ class TestDoctorCommand:
         result = runner.invoke(app_mod.app, ["doctor"])
         assert result.exit_code == 1
         assert "FAIL" in result.output
+
+    @pytest.mark.usefixtures("isolated_env")
+    def test_shows_license_and_source(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            "podcast.cli.app.doctor.run_checks",
+            _fake_checks([CheckResult(name="ffmpeg", ok=True, detail="version 7.1")]),
+        )
+        result = runner.invoke(app_mod.app, ["doctor"])
+        assert "AGPL-3.0-or-later" in result.output
+        assert "github.com/gabornyul/podcast" in result.output
 
 
 class TestConfigCommand:

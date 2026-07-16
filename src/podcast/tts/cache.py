@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Gabor Nyul
 """Content-addressed per-line segment cache: edit one line, re-render one line (ADR 0007)."""
 
 import hashlib

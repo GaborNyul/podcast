@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Gabor Nyul
 """Document ingestion: files in, labeled markdown sources out."""
 
 from podcast.ingest.loader import (

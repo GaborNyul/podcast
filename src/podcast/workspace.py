@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Gabor Nyul
 """Episode workspace: every artifact of one episode lives under episodes/<slug>/."""
 
 import json

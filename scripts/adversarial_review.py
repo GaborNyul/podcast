@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Gabor Nyul
 """Bounded adversarial review-fix loop (standards v3, Automated Adversarial Code Review)."""
 
 import argparse

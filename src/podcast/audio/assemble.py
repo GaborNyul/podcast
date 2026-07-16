@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Gabor Nyul
 """ffmpeg assembly: concat + randomized inter-turn silence + EBU R128 loudnorm (ADR 0008)."""
 
 import random

@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Gabor Nyul
 """Typer application: the single CLI boundary where typed errors become exit codes."""
 
 import hashlib
@@ -10,7 +12,7 @@ from rich.markup import escape
 from rich.progress import Progress
 from rich.table import Table
 
-from podcast import __version__, doctor, emphasis
+from podcast import LICENSE, SOURCE_URL, __version__, doctor, emphasis
 from podcast.audio import pacing
 from podcast.audio.assemble import assemble_episode, tempo_variant
 from podcast.cli import ui
@@ -54,6 +56,7 @@ def main_options(
     """Global options."""
     if version:
         ui.out.print(f"podcast {__version__}")
+        ui.out.print(f"{LICENSE} · {SOURCE_URL}")
         raise typer.Exit()
     if ctx.invoked_subcommand is None:
         ui.out.print(ctx.get_help())
@@ -66,6 +69,7 @@ def doctor_command() -> None:
     config = load_config()
     results = doctor.run_checks(config)
     ui.out.print(ui.checks_table(results))
+    ui.out.print(f"License: {LICENSE} · source: {SOURCE_URL}")
     if not all(result.ok for result in results):
         raise typer.Exit(1)
 

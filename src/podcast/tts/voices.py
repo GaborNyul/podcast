@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Gabor Nyul
 """Voice registry and speaker→voice resolution (gender defaults, config overrides)."""
 
 from collections.abc import Sequence

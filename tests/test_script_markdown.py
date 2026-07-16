@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Gabor Nyul
 """Tests for podcast.script.markdown — the lossless round-trip contract."""
 
 import pytest

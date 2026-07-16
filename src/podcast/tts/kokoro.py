@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Copyright (C) 2026 Gabor Nyul
 """Kokoro-82M via kokoro-onnx: CPU-only, torch-free, the works-everywhere engine."""
 
 import wave
