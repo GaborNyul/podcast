@@ -202,9 +202,11 @@ is two extra output lines (version, doctor), both pure functions of constants/me
   line is present in output.
 - **`tests/test_doctor.py`** — assert the doctor output contains the license/source
   notice.
-- **Header presence (optional but recommended):** a lightweight meta-test that every
-  first-party `.py` under `src/podcast/` contains an `SPDX-License-Identifier` line —
-  cheap insurance that the header pass stays complete as files are added.
+- **Header presence (enforced):** a meta-test that every first-party `.py` under the
+  full swept scope — `src/podcast/`, `tests/`, and `scripts/` (DP-2) — contains an
+  `SPDX-License-Identifier` line, so a new file in any of those roots without the header
+  fails the suite. (Enforcement scope must match the sweep scope; guarding only
+  `src/podcast/` would let `tests/` and `scripts/` headers rot silently.)
 - Header/`LICENSE`/README/`pyproject` edits are otherwise static; the coverage
   requirement is driven by the two CLI-output additions, which must be covered.
 
