@@ -179,3 +179,12 @@ project's locked dependencies rather than an empty isolated environment.
 The workspace artifacts (`sources.json`, `outline.json`, `transcript.json`) are a
 public contract validated by JSON Schemas in [schemas/](schemas/); changing the
 models requires deliberately regenerating those files (see `tests/test_contracts.py`).
+
+## License
+
+Licensed under the **GNU Affero General Public License v3.0 or later (AGPLv3+)** —
+see [LICENSE](LICENSE). In short: any distributed or **network-hosted** derivative must
+also be released under the AGPLv3, with source offered to its users. Podcasts you
+generate are your own — program output is not a derivative of the program.
+
+Copyright (C) 2026 Gabor Nyul
