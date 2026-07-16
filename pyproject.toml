@@ -8,7 +8,11 @@ version = "0.1.0"
 description = "Local-first NotebookLM-style podcast generator: documents in, two-host audio episode out."
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
-license = { text = "MIT" }
+license = "AGPL-3.0-or-later"
+license-files = ["LICENSE"]
+classifiers = [
+    "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
+]
 authors = [{ name = "Gabor Nyul", email = "gabor.nyul.hun@gmail.com" }]
 dependencies = [
     "typer>=0.16",
@@ -23,6 +27,10 @@ dependencies = [
     "kokoro-onnx>=0.4.9",
     "python-dotenv>=1.2.2",
 ]
+
+[project.urls]
+Homepage = "https://github.com/gabornyul/podcast"
+Repository = "https://github.com/gabornyul/podcast"
 
 [project.optional-dependencies]
 # GPU engine for AMD Strix Halo (gfx1151): torch comes from AMD's TheRock nightly
