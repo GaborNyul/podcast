@@ -68,6 +68,16 @@ class TestDoctorCommand:
         assert result.exit_code == 1
         assert "FAIL" in result.output
 
+    @pytest.mark.usefixtures("isolated_env")
+    def test_shows_license_and_source(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setattr(
+            "podcast.cli.app.doctor.run_checks",
+            _fake_checks([CheckResult(name="ffmpeg", ok=True, detail="version 7.1")]),
+        )
+        result = runner.invoke(app_mod.app, ["doctor"])
+        assert "AGPL-3.0-or-later" in result.output
+        assert "github.com/gabornyul/podcast" in result.output
+
 
 class TestConfigCommand:
     @pytest.mark.usefixtures("isolated_env")
