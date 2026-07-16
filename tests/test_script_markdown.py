@@ -206,6 +206,16 @@ class TestMarkdownToTranscript:
         )
         assert markdown_to_transcript(text).turns[0].text == "the *whole point*, not a footnote"
 
+    def test_two_char_emphasis_span_survives_the_round_trip(self) -> None:
+        # A minimal-width span: two chars exercise the grammar's optional
+        # interior with an empty middle; the span must not be dropped as a
+        # stray by write-side canonicalization or rejected by the parser.
+        transcript = Transcript(
+            title="T", hosts=_HOSTS, turns=[Turn(speaker="Alex", text="that's *it* folks")]
+        )
+        parsed = markdown_to_transcript(transcript_to_markdown(transcript))
+        assert parsed.turns[0].text == "that's *it* folks"
+
     @pytest.mark.parametrize(
         "bad_text",
         ["so **bold** wrong", "a stray * here", "a * padded * span"],
@@ -239,6 +249,32 @@ class TestMarkdownToTranscript:
     def test_unknown_host_with_delivery_raises(self) -> None:
         text = '---\ntitle: "T"\nhosts: ["Alex", "Maya"]\n---\n\n**Zed [warm]:** hello\n'
         with pytest.raises(ScriptError, match="unknown host 'Zed \\[warm\\]'"):
+            markdown_to_transcript(text)
+
+    def test_closing_bracket_without_opener_is_an_unknown_host(self) -> None:
+        text = '---\ntitle: "T"\nhosts: ["Alex", "Maya"]\n---\n\n**Alex]:** hi\n'
+        with pytest.raises(ScriptError, match="unknown host 'Alex\\]'"):
+            markdown_to_transcript(text)
+
+    def test_delivery_note_with_inner_brackets_splits_at_the_first_opener(self) -> None:
+        # The hand-edit tolerance the old regex gave: host = text before the
+        # FIRST '[', delivery = everything up to the trailing ']' (its own
+        # brackets then dropped by normalize_delivery).
+        text = (
+            '---\ntitle: "T"\nhosts: ["Alex", "Maya"]\n---\n\n**Alex [warm [really] tone]:** hi\n'
+        )
+        turn = markdown_to_transcript(text).turns[0]
+        assert turn.speaker == "Alex"
+        assert turn.delivery == "warm really tone"
+
+    def test_pathological_whitespace_speaker_token_fails_fast(self) -> None:
+        # The old `^(.*?)\s*\[(.*)\]$` delivery regex backtracked quadratically
+        # on a token like this (1.2s CPU at 50k spaces, ~20s at 200k); the
+        # string-op split is linear. Plain assertion by design — the suite's
+        # normal runtime/timeout is the regression guard.
+        token = "Bob" + " " * 50_000 + "x"
+        text = f'---\ntitle: "T"\nhosts: ["Alex", "Maya"]\n---\n\n**{token}:** hi\n'
+        with pytest.raises(ScriptError, match="unknown host"):
             markdown_to_transcript(text)
 
     def test_host_name_with_grammar_characters_is_rejected(self) -> None:

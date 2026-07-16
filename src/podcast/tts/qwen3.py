@@ -54,13 +54,16 @@ EMPHASIS_CLAUSE_TEMPLATE = "Put strong emphasis on the {noun} {names}."
 # CAPS-in-text is the only lever qwen3 reliably follows; the clause merely
 # calibrates an actual CAPS change (clause without a CAPS change went 0-for-5,
 # stressing the wrong word or nothing). So a span is treated — uppercased in
-# the text AND named in the clause — exactly when uppercasing changes a span
-# longer than 2 chars. Everything else gets no treatment, only its markup
-# stripped: short spans (CAPS read 'it' as the acronym "eye-tee") and spans
-# CAPS cannot change (all-caps 'RAG'/'AI', numerals '100').
+# the text AND named in the clause — exactly when its word content (the span's
+# alphanumeric characters) is longer than 2 chars and uppercasing changes it.
+# Everything else gets no treatment, only its markup stripped: short words
+# (CAPS read 'it' as the acronym "eye-tee" — punctuation as in 'it.' must not
+# smuggle them past the guard) and words CAPS cannot change (all-caps
+# 'RAG'/'AI', numerals '100').
 def _treated(span: str) -> bool:
     """True when the span is uppercased in the text and named in the clause."""
-    return len(span) > 2 and span.upper() != span
+    word = "".join(ch for ch in span if ch.isalnum())
+    return len(word) > 2 and word.upper() != word
 
 
 def _emphasis_clause(span_texts: Sequence[str]) -> str:
@@ -135,7 +138,9 @@ class Qwen3Engine:
         # the delivery note alone or None.
         clause = _emphasis_clause(treated)
         note = delivery.strip()
-        if clause and note.endswith((".", "!", "?")):
+        # A note ending in any non-alphanumeric character ('.', '!', '?', '…', …)
+        # already carries its own separator; only a bare word needs the '. ' join.
+        if clause and note and not note[-1].isalnum():
             instruct = f"{note} {clause}"
         else:
             instruct = ". ".join(part for part in (note, clause) if part)

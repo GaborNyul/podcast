@@ -49,6 +49,12 @@ class TestSpans:
     def test_multi_word_span(self) -> None:
         assert spans("the *whole point* is") == ["whole point"]
 
+    def test_two_char_span_matches(self) -> None:
+        # Exactly two chars exercises the grammar's optional interior: first
+        # char + empty middle + last char ('*i*' and '*it.*' cannot catch a
+        # middle that demands one-or-more characters, but '*it*' does).
+        assert spans("that's *it* folks") == ["it"]
+
     def test_bold_yields_only_the_inner_span(self) -> None:
         assert spans("**bold**") == ["bold"]
 
@@ -114,7 +120,8 @@ class TestNormalize:
 
 class TestValidate:
     @pytest.mark.parametrize(
-        "text", ["", "no markup at all", "say *two words* loud", "*a* mid *b*", "*a**b*"]
+        "text",
+        ["", "no markup at all", "say *two words* loud", "*a* mid *b*", "*a**b*", "*it*"],
     )
     def test_accepts_clean_and_valid_text(self, text: str) -> None:
         validate(text)

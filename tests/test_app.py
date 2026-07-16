@@ -1,6 +1,7 @@
 """Tests for podcast.cli.app."""
 
 import json
+import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import cast
@@ -574,6 +575,36 @@ class TestSynthesizeCommand:
         assert engine.dialogue_calls == 2  # marked text joins the dialogue digest
         assert any("*plain* terms" in text for text in engine.line_texts)
 
+    def test_dialogue_speaker_swap_rerenders_when_hosts_share_a_voice(
+        self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        workspace = _generate_episode(isolated_env, monkeypatch)
+        engine = _FakeDialogueEngine()
+        monkeypatch.setattr(app_mod, "create_engine", _engine_factory(engine))
+
+        def shared_voice(*_args: object) -> dict[str, str]:
+            return {"Alex": "shared", "Maya": "shared"}
+
+        monkeypatch.setattr(app_mod, "resolve_voices", shared_voice)
+        _fake_assemble(monkeypatch)
+        runner.invoke(app_mod.app, ["synthesize", "demo"])
+        assert engine.dialogue_calls == 1
+        # Swap who says what: same texts, same resolved voice, different speaker
+        # sequence. SoulX derives its [S1]/[S2] slot assignment from the speaker
+        # sequence, so the swapped script must re-render, not reuse stale audio.
+        script = workspace / "script.md"
+        content = script.read_text(encoding="utf-8")
+        swapped = (
+            content.replace("**Alex", "**SWAP")
+            .replace("**Maya", "**Alex")
+            .replace("**SWAP", "**Maya")
+        )
+        assert swapped != content
+        script.write_text(swapped, encoding="utf-8")
+        result = runner.invoke(app_mod.app, ["synthesize", "demo"])
+        assert result.exit_code == 0
+        assert engine.dialogue_calls == 2
+
     def test_defaults_to_most_recent_episode(
         self, isolated_env: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -653,6 +684,27 @@ class TestMain:
     def test_passes_through_clean_runs(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(app_mod, "app", lambda: None)
         app_mod.main()
+
+    def test_error_text_with_markup_like_fragments_prints_literally(
+        self,
+        isolated_env: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        capsys: pytest.CaptureFixture[str],
+    ) -> None:
+        # A hand-edited line with a stray '*' makes the emphasis ScriptError
+        # quote the script fragment; a '[/]' inside that fragment must reach
+        # the user literally instead of crashing rich's markup parser while
+        # the real error is being reported.
+        workspace = _generate_episode(isolated_env, monkeypatch)
+        script = workspace / "script.md"
+        content = script.read_text(encoding="utf-8")
+        assert "plain terms" in content
+        script.write_text(content.replace("plain terms", "plain [/] * terms", 1), "utf-8")
+        monkeypatch.setattr(sys, "argv", ["podcast", "synthesize", "demo"])
+        with pytest.raises(SystemExit) as excinfo:
+            app_mod.main()
+        assert excinfo.value.code == ScriptError.exit_code
+        assert "[/]" in capsys.readouterr().err
 
 
 class TestFormatsCommand:

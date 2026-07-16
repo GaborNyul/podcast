@@ -26,7 +26,6 @@ _EDIT_HINT = (
     "names from the list above; then run `podcast synthesize`. -->"
 )
 _TURN_RE = re.compile(r"^\*\*(.+?):\*\* ?(.*)$")
-_DELIVERY_RE = re.compile(r"^(.*?)\s*\[(.*)\]$")
 _DELIVERY_UNSAFE = re.compile(r"[\[\]:]")
 
 
@@ -107,9 +106,14 @@ def _split_speaker(token: str, known_hosts: set[str]) -> tuple[str, str] | None:
     brackets (validated in the front matter), so the split is unambiguous."""
     if token in known_hosts:
         return token, ""
-    match = _DELIVERY_RE.match(token)
-    if match is not None and match.group(1) in known_hosts:
-        return match.group(1), normalize_delivery(match.group(2))
+    # String ops instead of the old `^(.*?)\s*\[(.*)\]$` regex, whose lazy/greedy
+    # mix backtracked quadratically on pathological tokens (tens of thousands of
+    # spaces spun ~20s of CPU). Byte-identical semantics: the lazy head bound the
+    # FIRST '[', the greedy tail ran to the trailing ']'.
+    if token.endswith("]"):
+        opener = token.find("[")
+        if opener != -1 and (host := token[:opener].rstrip()) in known_hosts:
+            return host, normalize_delivery(token[opener + 1 : -1])
     return None
 
 

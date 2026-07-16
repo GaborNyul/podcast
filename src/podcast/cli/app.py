@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Annotated
 
 import typer
+from rich.markup import escape
 from rich.progress import Progress
 from rich.table import Table
 
@@ -216,7 +217,11 @@ def _dialogue_segments(
             digest.update(part.encode("utf-8"))
             digest.update(b"\x00")
     for line in lines:
-        for part in (engine.name, voices[line.speaker], line.text, line.delivery):
+        # line.speaker joins the key: dialogue engines derive their speaker-slot
+        # assignment (SoulX's [S1]/[S2]) from the speaker sequence, so two hosts
+        # sharing one resolved voice still produce different audio when lines
+        # swap speakers — the voice alone cannot distinguish those renders.
+        for part in (engine.name, line.speaker, voices[line.speaker], line.text, line.delivery):
             digest.update(part.encode("utf-8"))
             digest.update(b"\x00")
     key = digest.hexdigest()[:32]
@@ -421,5 +426,7 @@ def main() -> None:
     try:
         app()
     except PodcastError as exc:
-        ui.err.print(f"[fail]error:[/] {exc}")
+        # Error text may quote script fragments ('[/]', '[laughs]'…): escape it
+        # so rich prints it literally; only the [fail] style tag stays markup.
+        ui.err.print(f"[fail]error:[/] {escape(str(exc))}")
         raise SystemExit(exc.exit_code) from exc

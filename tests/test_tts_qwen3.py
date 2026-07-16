@@ -230,6 +230,32 @@ class TestQwen3Engine:
             "Speak at a fast, energetic pace. Put strong emphasis on the word 'whole'."
         )
 
+    def test_emphasis_clause_after_question_mark_delivery_keeps_single_separator(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        _install_fakes(monkeypatch, cuda_available=True)
+        engine = qwen3.Qwen3Engine(AppConfig())
+        engine.synthesize_line(
+            "That's the *whole* point", "Ryan", tmp_path / "x.wav", delivery="Ready?"
+        )
+        assert _FakeModel.generate_calls[0]["instruct"] == (
+            "Ready? Put strong emphasis on the word 'whole'."
+        )
+
+    def test_emphasis_clause_after_ellipsis_delivery_adds_no_extra_period(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Any non-alphanumeric terminal already separates — '…' must not
+        # collect a bolted-on '.' the way the old '.'/'!'/'?' allowlist did.
+        _install_fakes(monkeypatch, cuda_available=True)
+        engine = qwen3.Qwen3Engine(AppConfig())
+        engine.synthesize_line(
+            "That's the *whole* point", "Ryan", tmp_path / "x.wav", delivery="trailing off…"
+        )
+        assert _FakeModel.generate_calls[0]["instruct"] == (
+            "trailing off… Put strong emphasis on the word 'whole'."
+        )
+
     def test_emphasis_clause_names_repeated_span_once(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -309,6 +335,53 @@ class TestQwen3Engine:
         call = _FakeModel.generate_calls[0]
         assert call["text"] == "All 100 queries hit."
         assert call["instruct"] is None
+
+    def test_punctuated_short_span_gets_no_treatment(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # '*it.*' measures 3 chars, but the audition rule applies to the span's
+        # word content — the 2-char 'it' — so trailing punctuation cannot smuggle
+        # the acronym misread ("eye-tee") past the short-span guard.
+        _install_fakes(monkeypatch, cuda_available=True)
+        engine = qwen3.Qwen3Engine(AppConfig())
+        engine.synthesize_line("That's *it.* One line.", "Ryan", tmp_path / "x.wav")
+        call = _FakeModel.generate_calls[0]
+        assert call["text"] == "That's it. One line."
+        assert call["instruct"] is None
+
+    def test_punctuated_all_caps_span_gets_no_treatment(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Word content 'RAG' is all-caps: CAPS cannot change it, so no treatment.
+        _install_fakes(monkeypatch, cuda_available=True)
+        engine = qwen3.Qwen3Engine(AppConfig())
+        engine.synthesize_line("Try plain *RAG.* Then compare.", "Ryan", tmp_path / "x.wav")
+        call = _FakeModel.generate_calls[0]
+        assert call["text"] == "Try plain RAG. Then compare."
+        assert call["instruct"] is None
+
+    def test_punctuated_word_keeps_caps_and_clause_names_the_full_span(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Word content 'Not' (3 alnum chars, CAPS changes it) is treated; the
+        # clause quotes the span exactly as written, punctuation included.
+        _install_fakes(monkeypatch, cuda_available=True)
+        engine = qwen3.Qwen3Engine(AppConfig())
+        engine.synthesize_line("*Not!* every query needs it.", "Ryan", tmp_path / "x.wav")
+        call = _FakeModel.generate_calls[0]
+        assert call["text"] == "NOT! every query needs it."
+        assert call["instruct"] == "Put strong emphasis on the word 'Not!'."
+
+    def test_multi_word_span_is_treated_on_its_joined_word_content(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # 'two words' has word content 'twowords' — multi-word spans stay treated.
+        _install_fakes(monkeypatch, cuda_available=True)
+        engine = qwen3.Qwen3Engine(AppConfig())
+        engine.synthesize_line("the *two words* stand", "Ryan", tmp_path / "x.wav")
+        call = _FakeModel.generate_calls[0]
+        assert call["text"] == "the TWO WORDS stand"
+        assert call["instruct"] == "Put strong emphasis on the word 'two words'."
 
     def test_mixed_line_treats_only_clause_eligible_spans(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
